@@ -1,0 +1,43 @@
+{
+  // ── SQLTools: PostgreSQL 연결 (로컬 postgresql@17) ──
+  "sqltools.connections": [
+    {
+      "name": "skala_db",
+      "driver": "PostgreSQL",
+      "server": "localhost",
+      "port": 5432,
+      "database": "skala_db",
+      "username": "muna",
+      "askForPassword": false,
+      "connectionTimeout": 15,
+      "previewLimit": 50
+    }
+  ],
+
+  // 결과 패널을 에디터 오른쪽에 열기 (SQL / 결과 동시 캡처용)
+  "sqltools.results.location": "next",
+  "sqltools.results.limit": 200,
+  // 커서가 놓인 문장만 실행할 때 세미콜론 기준으로 자르기
+  "sqltools.queryParams.enableReplace": false,
+
+  // ── SQL 파일 편집 규칙 ──
+  "[sql]": {
+    "editor.tabSize": 2,
+    "editor.insertSpaces": true,
+    "editor.wordWrap": "on",
+    "editor.rulers": [100],
+    "editor.defaultFormatter": "mtxr.sqltools",
+    "editor.formatOnSave": false
+  },
+
+  // 실습 파일들이 항상 UTF-8 / LF 로 저장되도록 (한글 깨짐 방지)
+  "files.encoding": "utf8",
+  "files.eol": "\n",
+  "files.trimTrailingWhitespace": true,
+  "files.insertFinalNewline": true,
+
+  // 제출물 폴더는 탐색기에서 접어두기
+  "files.exclude": {
+    "**/.DS_Store": true
+  }
+}
