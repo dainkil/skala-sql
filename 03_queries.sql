@@ -2,13 +2,13 @@
 --  03_queries.sql — 학사관리시스템 조회
 --  SKALA SQL 종합실습 1
 --
---  대상 : PostgreSQL 17 / skala_db / 스키마 app
---  실행 : psql skala_db -f 03_queries.sql
+--  대상 : PostgreSQL 17 / skala_db1 / 스키마 app
+--  실행 : psql skala_db1 -f 03_queries.sql
 --  선행 : 01_ddl.sql → 02_dml_insert.sql
 --
---  [섹션 1] SELECT + WHERE + ORDER BY 기초 조회   ← 현재 파일
---  [섹션 2] COALESCE / CASE WHEN / 날짜 함수      (예정)
---  [섹션 3] 교차 테이블 JOIN 조회                 (예정)
+--  [섹션 1] SELECT + WHERE + ORDER BY 기초 조회   Q1-1 ~ Q1-16
+--  [섹션 2] COALESCE / CASE WHEN / 날짜 함수      Q2-1 ~ Q2-4
+--  [섹션 3] 교차 테이블 JOIN 조회                 Q3-1 ~ Q3-3
 -- =====================================================================
 --
 --  작성 규칙
@@ -199,9 +199,13 @@ SELECT code        AS 과목코드,
 --   참고 : paid_on IS NULL 이 곧 "미납"이다.
 --          미납금액은 저장하지 않으므로 billed_amount − paid_amount 로 계산한다.
 --          (파생 속성을 저장하지 않는다는 설계 결정의 결과)
+--   참고 : PK(student_id, semester_id) 를 함께 조회해 어느 행인지 식별한다.
+--          학번·학기명은 다른 테이블에 있으므로 섹션 3의 JOIN에서 확인한다.
 --   기대 : 3건
 -- ---------------------------------------------------------------------
-SELECT billed_amount                  AS 고지금액,
+SELECT student_id                     AS 학생ID,
+       semester_id                    AS 학기ID,
+       billed_amount                  AS 고지금액,
        paid_amount                    AS 납부금액,
        billed_amount - paid_amount    AS 미납금액,
        is_installment                 AS 분할납부
@@ -216,8 +220,12 @@ SELECT billed_amount                  AS 고지금액,
 --   주의 : score >= 85 만 쓰면 NULL 행은 자동으로 제외된다(비교가 unknown).
 --          그래도 IS NOT NULL 을 함께 쓰는 이유는 "미채점을 의도적으로
 --          제외했다"는 의도를 코드에 남기기 위해서다.
+--   참고 : PK(student_id, offering_id) 를 함께 조회해 어느 행인지 식별한다.
+--          성명·과목명은 섹션 3의 JOIN에서 확인한다.
 -- ---------------------------------------------------------------------
-SELECT score       AS 성적,
+SELECT student_id  AS 학생ID,
+       offering_id AS 강좌ID,
+       score       AS 성적,
        status      AS 신청상태,
        is_retake   AS 재수강여부,
        enrolled_at AS 신청일시
@@ -259,10 +267,15 @@ SELECT code        AS 과목코드,
 --   참고 : 개념설계에서 "교수는 강좌를 0개 이상 담당한다"고 참여도를
 --          선택으로 정했기 때문에 professor_id 가 NULL 일 수 있다.
 --          이 설계 결정이 ON DELETE SET NULL 을 가능하게 만든 근거이기도 하다.
+--   참고 : 자연키(semester_id, course_id, section)를 함께 조회해 행을 식별한다.
+--          학기명·과목명은 섹션 3의 JOIN에서 확인한다.
 --   기대 : 2건
 -- ---------------------------------------------------------------------
-SELECT section  AS 분반,
-       capacity AS 정원
+SELECT id          AS 강좌ID,
+       semester_id AS 학기ID,
+       course_id   AS 과목ID,
+       section     AS 분반,
+       capacity    AS 정원
   FROM app.offerings
  WHERE professor_id IS NULL
  ORDER BY capacity DESC;
@@ -309,6 +322,90 @@ SELECT student_no                                        AS 학번,
   FROM app.students
  WHERE status <> '자퇴'
  ORDER BY admitted_on, student_no;
+
+
+-- ---------------------------------------------------------------------
+-- Q2-2. 학적변동 이력 조회 — 사유 미기재 보완 및 변동유형 분류
+--   목적 : COALESCE 로 NULL 을 업무 문구로 대체하고, 단순 CASE 로 코드값을 분류
+--   함수 : COALESCE / CASE(단순형) / CASE(검색형) / TO_CHAR / EXTRACT / INTERVAL
+--   참고 : CASE 에는 두 형태가 있다.
+--            단순 CASE — CASE change_type WHEN '휴학' THEN ...  (등가 비교만 가능)
+--            검색 CASE — CASE WHEN changed_on >= ... THEN ...   (임의 조건 가능)
+--          등가 비교만 하면 단순형이 짧고 읽기 쉽다.
+--   기대 : 12건 (사유 미기재 3건이 '사유없음' 으로 표시된다)
+-- ---------------------------------------------------------------------
+SELECT student_id                                       AS 학생ID,
+       change_type                                      AS 변동구분,
+       TO_CHAR(changed_on, 'YYYY"년" MM"월" DD"일"')     AS 변동일,
+       EXTRACT(YEAR FROM changed_on)                    AS 변동연도,
+       COALESCE(reason, '사유없음')                      AS 변동사유,
+       CASE change_type WHEN '휴학'     THEN '학업중단'
+                        WHEN '복학'     THEN '학업재개'
+                        WHEN '전과'     THEN '소속변경'
+                        ELSE                 '학적종료'
+       END                                              AS 변동유형,
+       CASE WHEN changed_on >= CURRENT_DATE - INTERVAL '1 year'
+                 THEN '최근 1년 이내'
+            ELSE  '1년 경과'
+       END                                              AS 최근여부
+  FROM app.status_changes
+ ORDER BY changed_on DESC, student_id;
+
+
+-- ---------------------------------------------------------------------
+-- Q2-3. 학기별 등록금 납부 현황 — 납부상태 파생 및 납부율 산출
+--   목적 : 세 갈래 CASE WHEN 으로 저장되지 않은 업무 상태를 파생시킨다
+--   함수 : CASE WHEN / COALESCE / TO_CHAR / DATE_TRUNC / ROUND
+--   주의 : CASE WHEN 은 위에서부터 순서대로 평가되어 처음 참인 가지에서 멈춘다.
+--          paid_on IS NULL 을 맨 위에 두지 않으면 미납(paid_amount=0)이
+--          '분할납부중' 으로 잘못 분류된다. 조건 순서가 곧 우선순위다.
+--   참고 : TO_CHAR(NULL) 은 NULL 을 반환하므로 COALESCE 로 한 번 더 감싼다.
+--   기대 : 30건 (완납 23 · 분할납부중 4 · 미납 3)
+-- ---------------------------------------------------------------------
+SELECT student_id                                          AS 학생ID,
+       semester_id                                         AS 학기ID,
+       billed_amount                                       AS 고지금액,
+       paid_amount                                         AS 납부금액,
+       CASE WHEN paid_on IS NULL                THEN '미납'
+            WHEN paid_amount >= billed_amount   THEN '완납'
+            ELSE                                     '분할납부중'
+       END                                                 AS 납부상태,
+       ROUND(paid_amount / billed_amount * 100, 1)         AS 납부율,
+       COALESCE(TO_CHAR(paid_on, 'YYYY-MM-DD'), '미납')     AS 납부일,
+       COALESCE(DATE_TRUNC('month', paid_on)::date::text,
+                '-')                                       AS 납부월초
+  FROM app.registrations
+ ORDER BY semester_id, 납부상태, student_id;
+
+
+-- ---------------------------------------------------------------------
+-- Q2-4. 학기 일정 분석 — 기간 계산 및 현재 학기 판별
+--   목적 : 날짜 산술(date − date), CURRENT_DATE 기준 상태 판별
+--   함수 : TO_CHAR / EXTRACT / CASE WHEN / date 뺄셈 / INTERVAL
+--   참고 : date − date 의 결과는 integer(일수)다. timestamptz 끼리 빼면
+--          interval 이 나오므로 타입에 따라 결과 타입이 달라진다.
+--   참고 : 신청기간 일수에 +1 을 하는 이유는 시작일과 종료일을 모두
+--          포함하는 업무 관행(양 끝 포함) 때문이다.
+--   기대 : 12건 (오늘 기준으로 종료·진행중·예정 학기가 나뉜다)
+-- ---------------------------------------------------------------------
+SELECT year::text || '-' || term                       AS 학기,
+       TO_CHAR(starts_on, 'YYYY-MM-DD')                AS 개강일,
+       EXTRACT(MONTH FROM starts_on)                   AS 개강월,
+       ends_on - starts_on + 1                         AS 학기일수,
+       enroll_ends_on - enroll_starts_on + 1           AS 신청기간일수,
+       starts_on - enroll_ends_on                      AS 신청마감후개강까지,
+       CASE WHEN CURRENT_DATE < enroll_starts_on THEN '개설예정'
+            WHEN CURRENT_DATE <= enroll_ends_on  THEN '수강신청 중'
+            WHEN CURRENT_DATE <  starts_on       THEN '개강 대기'
+            WHEN CURRENT_DATE <= ends_on         THEN '학기 진행중'
+            ELSE                                      '종료'
+       END                                             AS 학기상태,
+       CASE WHEN ends_on >= CURRENT_DATE - INTERVAL '1 year'
+                 THEN '최근 학기'
+            ELSE  '과거 학기'
+       END                                             AS 최근구분
+  FROM app.semesters
+ ORDER BY year, term;
 
 
 -- =====================================================================
@@ -358,3 +455,68 @@ SELECT sm.year::text || '-' || sm.term       AS 학기,
    AND sm.term  = '1'
    AND e.status = '확정'
  ORDER BY sm.year, c.code, s.student_no;
+
+
+-- ---------------------------------------------------------------------
+-- Q3-2. 다중전공(이중전공·부전공) 이수 현황 조회
+--   목적 : 학생 N:M 학과 관계를 교차 테이블 student_majors 로 연결한다.
+--          수강신청 외에도 교차 테이블이 쓰이는 두 번째 사례.
+--
+--   구조 : 학생 ─ student_majors(교차) ─ 학과
+--
+--   참고 : students 에 major_id 컬럼을 두지 않은 이유가 이 쿼리에 드러난다.
+--          단일 FK 였다면 한 학생이 전공을 2개 이상 가질 수 없다.
+--          major_type 을 PK 에 포함시켜 (학생, 학과, 전공구분) 조합을 보장한다.
+--   기대 : 8건 (이중전공 3 · 부전공 5, 포기 1건 포함)
+-- ---------------------------------------------------------------------
+SELECT s.student_no                            AS 학번,
+       s.name                                  AS 성명,
+       d.name                                  AS 학과명,
+       d.college                               AS 계열,
+       sm.major_type                           AS 전공구분,
+       TO_CHAR(sm.started_on, 'YYYY-MM')       AS 이수시작,
+       CASE sm.status WHEN '이수중'   THEN '진행'
+                      WHEN '이수완료' THEN '완료'
+                      ELSE                 '중단'
+       END                                     AS 이수상태
+  FROM app.student_majors sm
+  JOIN app.students    s ON s.id = sm.student_id     -- 교차 → 학생
+  JOIN app.departments d ON d.id = sm.department_id  -- 교차 → 학과
+ WHERE sm.major_type <> '주전공'
+ ORDER BY s.student_no, sm.major_type;
+
+
+-- ---------------------------------------------------------------------
+-- Q3-3. 2026학년도 1학기 강의시간표 조회
+--   목적 : 1:N 관계(개설강좌 → 강의시간)를 JOIN 하여 시간표를 복원한다
+--
+--   구조 : 강의시간 ─ 개설강좌 ─ 교과목
+--                        └─ 학기
+--                        └─ 교수 (선택 관계 → LEFT JOIN)
+--
+--   참고 : 주 2회 수업은 offering_schedules 에 2행으로 저장된다(1NF).
+--          "월3,수4" 처럼 한 칸에 몰아넣지 않았기 때문에 요일별 정렬과
+--          시간표 충돌 검사가 가능하다. 그 대가로 강좌명이 반복 출력된다.
+--   기대 : 6건 (CSE202 1분반 2행 · 2분반 2행 · MEE101 1행 · GEN105 1행)
+-- ---------------------------------------------------------------------
+SELECT c.code                                  AS 과목코드,
+       c.title                                 AS 과목명,
+       o.section                               AS 분반,
+       CASE osc.day_of_week WHEN 1 THEN '월'
+                            WHEN 2 THEN '화'
+                            WHEN 3 THEN '수'
+                            WHEN 4 THEN '목'
+                            WHEN 5 THEN '금'
+       END                                     AS 요일,
+       osc.period                              AS 교시,
+       osc.classroom                           AS 강의실,
+       COALESCE(p.name, '미배정')               AS 담당교수,
+       o.capacity                              AS 정원
+  FROM app.offering_schedules osc
+  JOIN app.offerings   o  ON o.id  = osc.offering_id  -- 강의시간 → 개설강좌
+  JOIN app.courses     c  ON c.id  = o.course_id      -- 개설강좌 → 교과목
+  JOIN app.semesters   sm ON sm.id = o.semester_id    -- 개설강좌 → 학기
+  LEFT JOIN app.professors p ON p.id = o.professor_id -- 선택 관계이므로 LEFT
+ WHERE sm.year = 2026
+   AND sm.term = '1'
+ ORDER BY osc.day_of_week, osc.period, c.code;

@@ -22,7 +22,7 @@ psql postgres -U <계정> -W                 # 비번으로 접속
 ```
 
 ## DB 구조 (권장 스키마, 수정 가능)
-- **Database**: `skala_db`
+- **Database**: `skala_db1`
 - **Schema**: `app` (애플리케이션), 필요 시 `audit`
 - **테이블**
   - `majors` (학과): `id` PK, `code` UNIQUE, `name`
@@ -43,21 +43,6 @@ psql postgres -U <계정> -W                 # 비번으로 접속
 - NULL 처리는 `COALESCE`, 파생 컬럼은 `CASE WHEN` 활용
 - WHERE 절에서는 SELECT 별칭(alias) 사용 불가 — ORDER BY에서만 가능
 
-## 실습 과제 체크리스트
-1. `CREATE DATABASE` / `CREATE SCHEMA` 실행
-2. ERD 설계 (범례 포함, 연결선 겹침 금지)
-3. `CREATE TABLE` — 제약조건 포함 DDL 작성
-4. `INSERT INTO` — 테이블별 10건 이상 샘플 데이터
-5. `SELECT + WHERE + ORDER BY` 기초 조회
-6. `COALESCE` / `CASE WHEN` / 날짜 함수(`EXTRACT`, `DATE_TRUNC`, `TO_CHAR`, `INTERVAL`) 활용
-7. 수강신청 교차 테이블 JOIN 조회
-
-## 제출물 (당일 제출 원칙)
-- **ERD (학사관리시스템)**: 범례 설명문 추가, 각 연결관계가 명확히 보이도록 (선 겹침 금지)
-- **리포트 (PDF)**:
-  - 학사관리시스템 요구사항 (설계 방향)
-  - PostgreSQL 접속 결과 화면
-  - 문항별 실습 결과 — SQL문 + 실행 결과 화면 필수 (**항목 누락 시 감점**)
 
 ## 권장 파일 구조
 ```

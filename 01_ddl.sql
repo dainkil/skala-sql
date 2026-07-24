@@ -2,13 +2,15 @@
 --  01_ddl.sql — 학사관리시스템 스키마 정의
 --  SKALA SQL 종합실습 1
 --
---  대상   : PostgreSQL 17 / skala_db / 스키마 app
---  실행   : psql skala_db -v ON_ERROR_STOP=1 -f 01_ddl.sql
---  구성   : 테이블 12 · FK 15 · UNIQUE 8 · CHECK 26 · 인덱스 11
+--  대상   : PostgreSQL 17 / skala_db1 / 스키마 app
+--  실행   : psql skala_db1 -v ON_ERROR_STOP=1 -f 01_ddl.sql
+--  구성   : 테이블 12 · PK 12 · FK 15 · UNIQUE 11 · CHECK 25 · 인덱스 11
+--           (검증: SELECT contype, count(*) FROM pg_constraint
+--                    WHERE connamespace='app'::regnamespace GROUP BY contype;)
 --
 --  ※ CREATE DATABASE 는 이 파일에 포함하지 않는다.
 --    데이터베이스에 접속한 상태에서는 자기 자신을 만들 수 없기 때문이다.
---    (사전 실행 완료: CREATE DATABASE skala_db ... ICU_LOCALE 'ko-KR')
+--    → 00_create_db.sql 에 분리 (postgres DB 에 접속해서 먼저 실행할 것)
 -- =====================================================================
 
 

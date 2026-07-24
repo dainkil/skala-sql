@@ -2,8 +2,8 @@
 --  02_dml_insert.sql — 학사관리시스템 샘플 데이터
 --  SKALA SQL 종합실습 1
 --
---  대상 : PostgreSQL 17 / skala_db / 스키마 app
---  실행 : psql skala_db -v ON_ERROR_STOP=1 -f 02_dml_insert.sql
+--  대상 : PostgreSQL 17 / skala_db1 / 스키마 app
+--  실행 : psql skala_db1 -v ON_ERROR_STOP=1 -f 02_dml_insert.sql
 --  선행 : 01_ddl.sql
 --
 --  건수 : semesters 12 · departments 10 · students 20 · professors 12
