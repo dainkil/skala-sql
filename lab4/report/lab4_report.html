@@ -1,0 +1,226 @@
+<meta charset="utf-8">
+<style>
+  @page { size: A4; margin: 16mm 15mm; }
+  * { box-sizing: border-box; }
+  html, body {
+    font-family: 'Malgun Gothic', '맑은 고딕', 'Apple SD Gothic Neo', 'AppleGothic', sans-serif;
+    font-size: 10pt;
+    line-height: 1.0;
+    color: #111;
+    margin: 0;
+  }
+  h1 { font-size: 15pt; font-weight: 700; line-height: 1.0; margin: 0 0 4pt 0; }
+  h2 { font-size: 15pt; font-weight: 700; line-height: 1.0; margin: 16pt 0 6pt 0;
+       padding-bottom: 3pt; border-bottom: 1.2pt solid #333; page-break-after: avoid; }
+  h3 { font-size: 10pt; font-weight: 700; line-height: 1.0; margin: 9pt 0 3pt 0; page-break-after: avoid; }
+  p  { font-size: 10pt; line-height: 1.0; margin: 3pt 0; }
+  .sub { font-size: 10pt; color: #444; margin: 0 0 2pt 0; }
+  ul, ol { font-size: 10pt; line-height: 1.0; margin: 2pt 0 2pt 0; padding-left: 16pt; }
+  li { margin: 1.5pt 0; }
+  ul ul, ul ol, ol ul, ol ol { margin: 1pt 0; padding-left: 15pt; }
+  code, .m { font-family: 'D2Coding', 'Menlo', 'Consolas', monospace; font-size: 9pt; }
+  .q { font-weight: 700; }
+  .imp { font-weight: 700; }
+  .gain { font-weight: 700; }
+  li { page-break-inside: avoid; }
+</style>
+
+<h1>lab4 — E-Commerce 쿼리 튜닝 리포트</h1>
+<p class="sub">DB <code>skala_db4</code> / 스키마 <code>ecom</code> · PostgreSQL 17. 각 문항을 「작성 → EXPLAIN ANALYZE 병목 파악 → 인덱스/조인/MV 처방 → 재측정」 순으로 튜닝.</p>
+<p class="sub">측정 기준: <code>EXPLAIN (ANALYZE, BUFFERS)</code> 2회차 값, 비교는 Execution Time. 시드가 <code>random()</code> 기반이라 수치는 스냅샷. 근거 캡처: <code>captures/Q0X_{before,after,joins}.txt</code>.</p>
+
+<h2>1. 문항별 요약</h2>
+<ol>
+  <li><span class="q">Q01 · 최근 1개월 실판매 총액</span> — 개선 <span class="gain">8.36 → 4.99ms (~40%↓)</span>
+    <ul>
+      <li>병목: <code>COUNT(DISTINCT)</code>가 부른 Sort(219kB)</li>
+      <li>처방: 불필요한 컬럼 제거 → Sort 소멸</li>
+    </ul>
+  </li>
+  <li><span class="q">Q02 · 월별 주문수 / 매출 / AOV</span> — 개선 <span class="gain">12.16 → 2.07ms (~83%↓)</span>
+    <ul>
+      <li>병목: <code>COUNT(DISTINCT)</code> Sort(952kB) + order_items 18,700행 조인 스캔</li>
+      <li>처방 ①: 매출은 MV 월 롤업 · 건수는 orders 단독 집계로 분리(조인·Sort 제거)</li>
+      <li>처방 ②: 부분 커버링 인덱스로 Index-Only Scan</li>
+    </ul>
+  </li>
+  <li><span class="q">Q03 · 최근 90일 카테고리 Top10</span> — 개선 <span class="gain">12.35 → 1.11ms (~91%↓)</span>
+    <ul>
+      <li>병목: order_items 18,700행 조인 + 집계(Hash Join). order_ts 61% 통과라 인덱스 기각</li>
+      <li>처방: 카테고리×일 사전집계 MV(<code>mv_category_daily</code>)로 조인 대체</li>
+    </ul>
+  </li>
+  <li><span class="q">Q04 · 제품별 누적매출 RANK Top20</span> — 개선 <span class="gain">10.76 → 0.55ms (~95%↓)</span>
+    <ul>
+      <li>병목: order_items 18,700행 조인 → 제품 집계(Hash Join). 누적이라 날짜필터 없음 → 인덱스 무의미</li>
+      <li>처방: 제품 누적매출 MV(<code>mv_product_revenue</code>, 600행)로 조인 대체 후 RANK</li>
+    </ul>
+  </li>
+  <li><span class="q">Q05 · 고객 RFM</span> — 개선 <span class="gain">17.85 → 5.54ms (~69%↓)</span>
+    <ul>
+      <li>병목: order_items 조인 + <code>COUNT(DISTINCT)</code> Sort(1065kB) + NTILE 3중 정렬</li>
+      <li>처방: 고객 집계 MV(<code>mv_customer_rev</code>)로 조인·대형 Sort 제거, NTILE 등급은 조회 시 부여</li>
+    </ul>
+  </li>
+  <li><span class="q">Q06 · 첫 구매 후 30일 내 재구매율</span> — 개선 <span class="gain">8.55 → 5.98ms (~30%↓)</span>, Buffers 142 → 74
+    <ul>
+      <li>병목: <code>orders</code> 2회 Seq Scan + self-join(30일 window가 Join Filter)</li>
+      <li>처방: 쿼리 재작성 — <code>MIN() OVER</code>로 첫주문일 부여 → 단일 스캔, self-join 제거(MV 미사용)</li>
+    </ul>
+  </li>
+  <li><span class="q">Q07 · 품절 위험 재고</span> — <span class="gain">0.385ms (튜닝 불필요)</span>
+    <ul>
+      <li>병목: 없음 — inventory(600)⋈products(600), 이미 ~0.4ms</li>
+      <li>처방: 변경 없음 — 부분 인덱스 검토 후 기각(소규모라 Seq Scan 최적, 강제 시 더 느림)</li>
+    </ul>
+  </li>
+  <li><span class="q">Q08 · 효자상품(평점 4.5↑ · 리뷰 50↑)</span> — 개선 <span class="gain">1.94 → 0.79ms (~59%↓)</span>
+    <ul>
+      <li>병목: reviews(2,031)⋈products 조인을 먼저 → 2,031행에 상품정보 실어 GROUP BY</li>
+      <li>처방: 집계-후-조인 재작성 — reviews 먼저 집계 + HAVING(12개) → 살아남은 12개만 조인</li>
+    </ul>
+  </li>
+  <li><span class="q">Q09 · 쿠폰 사용/미사용 AOV 비교</span> — 개선 <span class="gain">16.04 → 6.95ms (~57%↓)</span>
+    <ul>
+      <li>병목: order_items⋈orders(14,522행) 위 <code>COUNT(DISTINCT)</code>용 Sort(1030kB, ~9ms)</li>
+      <li>처방: 매출/건수 분리(Q02 패턴) — 매출은 조인 후 2그룹 SUM, 주문수는 orders 단독 COUNT → DISTINCT·Sort 소멸</li>
+      <li>인사이트: 쿠폰 사용 주문 AOV(1,837)가 미사용(642)의 약 2.9배</li>
+    </ul>
+  </li>
+  <li><span class="q">Q10 · 상위 1% 고객의 최근 60일 매출</span> — 개선 <span class="gain">14.33 → 7.06ms (~51%↓)</span>
+    <ul>
+      <li>병목: <code>customer_total</code> 대전집계(order_items 18,700⋈orders → 2,246고객)로 상위 1% 판별</li>
+      <li>처방: MV 재사용 — 랭킹을 <code>mv_customer_rev.monetary</code>로 대체, 최근 60일 매출만 실데이터 조인</li>
+    </ul>
+  </li>
+  <li><span class="q">Q11 · 안전 나눗셈으로 평균 안전 계산</span> — 개선 <span class="gain">4.10 → 1.28ms (~69%↓)</span>
+    <ul>
+      <li>병목: 리뷰 0건 상품 479개 → 수동 평균에서 0/0 division by zero</li>
+      <li>처방: 함수 선택 — sql <code>safe_div</code>는 인라인(=NULLIF 동일 1.28ms), plpgsql <code>f_safe_div</code>는 미인라인(2.87ms) → <code>safe_div</code> 채택</li>
+    </ul>
+  </li>
+</ol>
+
+<h2>2. 인덱스 추가 / 개선</h2>
+<p class="sub">스크립트: <code>tuning/indexes.sql</code>. 핵심 원칙 — 「인덱스는 쿼리를 커버해야 타고, 소규모·저선택도에선 Seq Scan이 최적」.</p>
+<ul>
+  <li><span class="imp">Q02 · 적용</span> — <code>idx_orders_rev_ts = orders(order_ts) WHERE status IN(3)</code> (부분 커버링)
+    <ul>
+      <li>월별 주문건수 집계가 Seq Scan → Index Only Scan(Heap Fetches 0). order_ts·상태만 필요해 인덱스가 쿼리를 완전 커버 → 힙·필터 생략. 4.69 → 2.07ms</li>
+      <li>단, Index-Only 이득은 VACUUM/가시성맵 최신에 의존</li>
+    </ul>
+  </li>
+  <li><span class="imp">Q01 · 미적용</span> — 동일 인덱스 후보 검토
+    <ul>
+      <li><code>line_total</code>(order_items 조인)이 필요해 인덱스가 커버 못 함 + 21% 선택도 → 플래너가 Seq Scan 유지. "같은 인덱스라도 쿼리가 커버돼야 탄다"는 대비 사례</li>
+    </ul>
+  </li>
+  <li><span class="imp">Q04 · 생성했으나 미사용</span> — <code>idx_mv_product_revenue_rev = mv_product_revenue(revenue DESC)</code>
+    <ul>
+      <li>RANK의 ORDER BY용이지만 MV가 600행이라 플래너가 Seq Scan+quicksort 선택. ORDER BY+인덱스 이득은 규모 의존(행 수가 커지면 Sort 제거에 기여)</li>
+    </ul>
+  </li>
+  <li><span class="imp">Q07 · 검토 후 기각</span> — <code>idx_inventory_at_risk = inventory(product_id) INCLUDE(qty,reorder) WHERE qty&lt;reorder</code> (부분 커버링)
+    <ul>
+      <li>inventory 600행이라 Seq Scan(5 buffers)이 인덱스+힙보다 저렴 → 플래너 거부, 강제 사용 시 cost 12.5 → 16으로 더 느림. "부분 인덱스는 대형+저선택도에서만 의미"</li>
+    </ul>
+  </li>
+  <li><span class="imp">Q08 · 검토 후 기각</span> — <code>idx_reviews_prod_rating = reviews(product_id) INCLUDE(rating)</code> (커버링)
+    <ul>
+      <li>reviews 2,031행 전건 집계라 Seq Scan(21 buffers)이 Index-Only Scan보다 저렴 → 플래너 미사용. Q08은 인덱스 대신 집계-후-조인 재작성으로 해결</li>
+    </ul>
+  </li>
+</ul>
+
+<h2>3. Join 전략 비교 및 적용 (HJ / SMJ / NLJ)</h2>
+<p class="sub">Q01~Q04는 <code>order_items ⋈ orders</code> 등가 조인, Q06은 <code>orders ⋈ orders</code> self-join. <code>enable_hashjoin</code>/<code>enable_mergejoin</code>/<code>enable_nestloop</code> 스위치로 3전략 강제 비교 → cost는 항상 HJ가 최소, 플래너가 HJ 선택.</p>
+<h3>문항별 cost (HJ=선택 / SMJ / NLJ)</h3>
+<ul>
+  <li>Q01 items⋈orders(최근 1개월): HJ <span class="imp">651</span> / SMJ 1001 / NLJ 1610 — NLJ Buffers 4363(=17배)</li>
+  <li>Q02 items⋈orders(전체 매출): HJ <span class="imp">685</span> / SMJ 1149 / NLJ 3056</li>
+  <li>Q03 items⋈orders⋈products⋈cat(90일): HJ <span class="imp">903</span> / SMJ 2172 / NLJ 4417 — NLJ 실측도 최악(14.8ms)</li>
+  <li>Q04 items⋈orders(누적): HJ <span class="imp">795</span> / SMJ 1311 / NLJ 3363</li>
+  <li>Q06 orders⋈orders self(30일 window): HJ <span class="imp">442</span> / SMJ 1019 / NLJ 1607 — NLJ Buffers 5919(=41배), window는 Join Filter</li>
+  <li>Q07 inventory⋈products(600×600): HJ <span class="imp">29.6</span> / SMJ 59.9 / NLJ 115 — NLJ Buffers 185(=15배)</li>
+  <li>Q08 reviews(2031)⋈products: HJ <span class="imp">67.2</span> / SMJ 219.5 / NLJ 130 — NLJ+Memoize Buffers 384(=13.7배)</li>
+  <li>Q09 items⋈orders(매출): HJ <span class="imp">649</span> / SMJ 1113 / NLJ 3019 — NLJ Buffers 16176(=62배), 지배 비용은 조인 위 COUNT(DISTINCT) Sort</li>
+  <li>Q10 items⋈orders(고객 집계): HJ <span class="imp">649</span> / SMJ 1113 / NLJ 3019 — NLJ Buffers 16168(=62배)</li>
+  <li>Q11 products(600)⋈prod_rev(121): 소규모라 3방식 모두 sub-0.15ms 동일권(핵심은 조인 아닌 함수 선택)</li>
+</ul>
+<h3>해석</h3>
+<ul>
+  <li><span class="imp">HJ가 정답</span>: 대형×대형 등가 조인 → 양쪽 1회 스캔 후 해시. cost 최소이자 규모 안정적</li>
+  <li><span class="imp">NLJ의 함정</span>: 작고 캐시된 데이터에선 wall-clock이 빠를 때가 있으나 Buffers가 최대 62배까지 폭발 → 데이터↑/캐시미스 시 위험. cost·buffers·loops로 판단</li>
+  <li><span class="imp">SMJ</span>: order_items가 <code>idx_order_items_order</code>로 이미 정렬돼 나쁘지 않지만, 반대쪽 정렬 비용 탓에 HJ보다 cost 높음</li>
+</ul>
+<h3>적용 결과</h3>
+<ul>
+  <li>강제 전환한 쿼리는 없음 — 모든 문항에서 플래너의 HJ가 최적이라 유지</li>
+  <li>더 나아가 「조인 자체를 없애거나 줄이는」 것이 최종 튜닝. 수단은 문항 성격별로 갈림:
+    <ul>
+      <li>Q02~Q04: MV 사전집계로 <code>order_items ⋈ orders</code> 조인을 MV 읽기로 대체(무거운 팩트 조인)</li>
+      <li>Q06: <code>MIN() OVER (PARTITION BY customer_id)</code> 재작성으로 self-join을 단일 스캔으로 대체(자기참조)</li>
+      <li>Q08: 집계-후-조인 재작성으로 조인 입력을 2,031행 → 12행으로 축소</li>
+    </ul>
+  </li>
+</ul>
+<p class="sub">보충 — 함수·표현식 최적화(Q11): sql <code>safe_div</code>는 플래너가 인라인 → 순수 <code>NULLIF</code>와 동일 1.28ms, plpgsql <code>f_safe_div</code>는 인라인 불가라 행당 호출로 2.87ms(~2.2배). '리뷰 없음'은 NULL이 의미상 맞아 <code>safe_div</code> 채택.</p>
+
+<h2>4. Materialized View</h2>
+<h3>활용 요약 (MV → 활용 쿼리 → 효과)</h3>
+<ul>
+  <li><code>mv_daily_gmv</code> → Q02: order_items 조인 대신 MV(124행) 월 롤업 → 12.16 → 4.69ms · 스크립트 배포 스키마 + <code>tuning/mv_daily_gmv.sql</code></li>
+  <li><code>mv_category_daily</code> → Q03: order_items 18,700행 조인 대신 MV(~890행) → 12.35 → 1.11ms · <code>tuning/mv_category_daily.sql</code></li>
+  <li><code>mv_product_revenue</code> → Q04: order_items 18,700행 조인 대신 MV(600행) → 10.76 → 0.55ms · <code>tuning/mv_product_revenue.sql</code></li>
+  <li><code>mv_customer_rev</code> → Q05 + Q10: Q05 조인+COUNT(DISTINCT) 제거 17.85 → 5.54ms / Q10 랭킹 대전집계 대체 14.33 → 7.06ms · <code>tuning/mv_customer_rev.sql</code></li>
+</ul>
+<h3>문항별 노트</h3>
+<ul>
+  <li>Q02: 매출은 MV, 건수는 orders 단독 집계로 분리(실시간 유지). orphan 주문 0건 확인 후 분리해도 결과 동일</li>
+  <li>Q03: 카테고리×일 사전집계. MV는 day 단위라 '최근 90일'을 <code>date_trunc('day', now())</code> 기준으로 맞춰야 원본과 일치(한낮 경계로 두면 경계일 누락)</li>
+  <li>Q04: 제품 누적매출(전체 기간) 사전집계. RANK를 600행에만 적용</li>
+  <li>Q05: 고객 R/F/M 원지표 사전집계. last_order_ts만 저장 → 경과일은 조회 시 계산(매일 최신), NTILE 등급도 조회 시 부여. 남은 비용은 NTILE 3중 정렬(전체 순위라 사전계산 불가)</li>
+  <li>Q10: 같은 <code>mv_customer_rev</code>의 monetary로 상위 1% 랭킹만 대체, 최근 60일 매출은 실데이터 조인 → "누가 우량인가"는 MV 스냅샷(15:00), "최근 얼마 썼나"는 항상 최신. 하나의 MV가 두 문항(Q05·Q10)을 함께 가속하는 재사용 사례</li>
+  <li>Q06: 일부러 MV를 만들지 않음 — 이미 &lt;10ms 리포트라 self-join 제거(window 재작성)만으로 충분. "MV가 항상 답은 아니다"의 판단 사례</li>
+</ul>
+<h3>mv_daily_gmv 상세</h3>
+<ul>
+  <li>정의: 매출상태 3종만 일별 <code>sum(line_total)</code> 사전집계 → 일별 총 판매금액 리포트 가속. 현재 124행(2026-03-26~08-01)</li>
+  <li>가속 실증: 원본 조인 집계 ~12~14ms(Buffers 252) → MV 조회 0.02ms(Buffers 1), 약 600배</li>
+  <li>실행 시점(조회·갱신·원본변경 분리): 조회 = 저장 스냅샷 읽기(재계산 안 함) / REFRESH만 재계산(오후 3시 스케줄러 하루 1회) / 원본 변경은 수시(REFRESH 전까지 stale)</li>
+</ul>
+<h3>갱신 전략</h3>
+<ul>
+  <li>주기: 매일 15:00 1회 — 과거일은 확정값(불변), 당일치만 갱신 대상</li>
+  <li>신선도: 당일 데이터 최대 ~24h 지연 — 오후 리포팅 직전 1회 갱신으로 일관 스냅샷</li>
+  <li>방식: <code>REFRESH ... CONCURRENTLY</code> — 갱신 중에도 조회 무차단(전체 REFRESH는 조회 잠금). 전제로 UNIQUE 인덱스 필요(<code>ux_mv_daily_gmv_day</code> 추가 완료)</li>
+  <li>스케줄: <code>pg_cron</code> 미설치 → OS 스케줄러(launchd 권장 / cron 대안). 설계·문서만, 시스템 미설치. 대상 스크립트 <code>tuning/refresh_mv_daily_gmv.sh</code>(4개 MV 일괄 CONCURRENTLY 갱신)</li>
+</ul>
+
+<h2>5. 첨부 사진 파일명 (숫자 순서)</h2>
+<ol>
+  <li>1-1.png</li>
+  <li>1-2.png</li>
+  <li>2-1.png</li>
+  <li>2-2.png</li>
+  <li>3-1.png</li>
+  <li>3-2.png</li>
+  <li>4-1-1.png</li>
+  <li>4-1-2.png</li>
+  <li>4-2-1.png</li>
+  <li>4-2-2.png</li>
+  <li>5-1.png</li>
+  <li>5-2.png</li>
+  <li>6-1.png</li>
+  <li>6-2.png</li>
+  <li>7-1.png</li>
+  <li>8-1.png</li>
+  <li>8-2.png</li>
+  <li>9-1.png</li>
+  <li>9-2.png</li>
+  <li>10-1-1.png</li>
+  <li>10-1-2.png</li>
+  <li>10-2.png</li>
+  <li>11.png</li>
+  <li>11-2.png</li>
+</ol>

@@ -16,6 +16,7 @@
 | **Q05** | 고객 RFM | order_items 조인 + `COUNT(DISTINCT)` Sort(1065kB) + NTILE 3중 정렬 | 고객 집계 MV(`mv_customer_rev`)로 조인·대형Sort 제거, NTILE는 조회 시 | **17.85→5.54ms (~69%↓)** |
 | **Q06** | 30일 내 재구매율 | `orders` 2회 Seq Scan + self-join(30일 window=Join Filter) | **쿼리 재작성**: `MIN() OVER`로 첫주문일 부여→단일 스캔, self-join 제거(MV 미사용) | **8.55→5.98ms (~30%↓)**, Buffers 142→74 |
 | **Q07** | 품절 위험 재고 | 없음 — inventory(600)⋈products(600), 이미 ~0.4ms | **변경 없음**: 부분 인덱스 검토→기각(소규모라 Seq Scan 최적, 강제 시 더 느림) | **0.385ms (튜닝 불필요)** |
+
 | **Q08** | 효자상품(평점4.5↑·리뷰50↑) | reviews(2031)⋈products 조인을 먼저 → 2031행에 상품정보 실어 GROUP BY | **집계-후-조인 재작성**: reviews 먼저 집계+HAVING(12개)→살아남은 12개만 조인 | **1.94→0.79ms (~59%↓)** |
 | **Q09** | 쿠폰 사용/미사용 AOV 비교 | order_items⋈orders(14,522행) 위 `COUNT(DISTINCT)`용 Sort(1030kB, ~9ms) | **매출/건수 분리**(Q02 패턴): 매출=조인 후 2그룹 SUM, 주문수=orders 단독 COUNT → DISTINCT·Sort 소멸 | **16.04→6.95ms (~57%↓)** |
 | **Q10** | 상위 1% 고객 최근 60일 매출 | `customer_total` 대전집계(order_items 18,700⋈orders→2,246고객)로 상위1% 판별 (~9.7ms) | **MV 재사용**: 랭킹을 `mv_customer_rev.monetary`로 대체, 60일 매출만 실데이터 조인 | **14.33→7.06ms (~51%↓)** |
