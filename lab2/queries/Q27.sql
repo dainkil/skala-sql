@@ -251,7 +251,7 @@ SELECT pg_size_pretty(pg_relation_size('lab.enroll'))                AS 테이�
                    / NULLIF(pg_relation_size('lab.enroll'), 0), 1)   AS 인덱스비율_퍼센트;
 -- 실측 : 테이블 144 kB / 인덱스 합계는 생성 후 약 144 kB (100% 수준)
 --   ix_enroll_student 96 kB 가 (course, student_id) 48 kB 의 두 배인 점에 주의.
---   컬럼이 하나 더 적은데 크기는 두 배다. 04_lab_data_fix.sql 에서 enroll 을
+--   컬럼이 하나 더 적은데 크기는 두 배다. 00_data_fix.sql 에서 enroll 을
 --   전량 DELETE 후 재적재하면서 기존 인덱스에 빈 공간(bloat)이 남았기 때문이다.
 --   REINDEX INDEX lab.ix_enroll_student; 로 회수할 수 있다.
 

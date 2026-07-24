@@ -1,7 +1,7 @@
 -- ============================================================
 --  SKALA SQL 종합실습 2 — 배경(요구사항) 기준 데이터 보정
 --  대상 : PostgreSQL 17 / skala_db / 스키마 lab
---  실행 : psql skala_db -v ON_ERROR_STOP=1 -f 04_lab_data_fix.sql
+--  실행 : psql skala_db -v ON_ERROR_STOP=1 -f 00_data_fix.sql
 --
 --  배포된 적재 스크립트가 배경 문서의 규칙과 달라 두 곳을 보정한다.
 --    (1) enroll : 학생당 수강 건수 규칙을 student_id % 3 기준으로 재적재
