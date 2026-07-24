@@ -1,0 +1,68 @@
+======================================================================
+ Q07 튜닝 검토 결과 : 변경 없음 (부분 인덱스 기각)
+   baseline 이 이미 ~0.4ms / 18 buffers → 적용할 개선 없음.
+   아래는 '부분 커버링 인덱스'를 시험했으나 플래너가 거부/더 느림을 보인 근거.
+======================================================================
+
+########## 부분 커버링 인덱스 생성 ##########
+CREATE INDEX
+ANALYZE
+
+########## (a) 기본 : 인덱스 있어도 플래너는 Seq Scan 유지 (Seq 5 buffers < index+heap) ##########
+                                                         QUERY PLAN                                                         
+----------------------------------------------------------------------------------------------------------------------------
+ Sort  (cost=37.73..38.23 rows=200 width=43) (actual time=0.336..0.342 rows=60 loops=1)
+   Sort Key: ((i.reorder_point - i.qty_on_hand)) DESC, i.product_id
+   Sort Method: quicksort  Memory: 28kB
+   Buffers: shared hit=18
+   ->  Hash Join  (cost=15.00..30.09 rows=200 width=43) (actual time=0.146..0.287 rows=60 loops=1)
+         Hash Cond: (p.product_id = i.product_id)
+         Buffers: shared hit=12
+         ->  Seq Scan on products p  (cost=0.00..13.00 rows=600 width=31) (actual time=0.013..0.074 rows=600 loops=1)
+               Buffers: shared hit=7
+         ->  Hash  (cost=12.50..12.50 rows=200 width=16) (actual time=0.119..0.119 rows=60 loops=1)
+               Buckets: 1024  Batches: 1  Memory Usage: 11kB
+               Buffers: shared hit=5
+               ->  Seq Scan on inventory i  (cost=0.00..12.50 rows=200 width=16) (actual time=0.012..0.097 rows=60 loops=1)
+                     Filter: (qty_on_hand < reorder_point)
+                     Rows Removed by Filter: 540
+                     Buffers: shared hit=5
+ Planning:
+   Buffers: shared hit=224
+ Planning Time: 1.327 ms
+ Execution Time: 0.411 ms
+(20개 행)
+
+
+########## (b) enable_seqscan=off 강제 : 부분 인덱스 사용 시 → 오히려 cost·buffers 증가 ##########
+SET
+                                                                    QUERY PLAN                                                                     
+---------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort  (cost=63.49..63.99 rows=200 width=43) (actual time=0.298..0.306 rows=60 loops=1)
+   Sort Key: ((i.reorder_point - i.qty_on_hand)) DESC, i.product_id
+   Sort Method: quicksort  Memory: 28kB
+   Buffers: shared hit=21 read=1
+   ->  Hash Join  (cost=18.77..55.85 rows=200 width=43) (actual time=0.087..0.254 rows=60 loops=1)
+         Hash Cond: (p.product_id = i.product_id)
+         Buffers: shared hit=15 read=1
+         ->  Index Scan using products_pkey on products p  (cost=0.28..35.27 rows=600 width=31) (actual time=0.008..0.104 rows=600 loops=1)
+               Buffers: shared hit=10
+         ->  Hash  (cost=15.99..15.99 rows=200 width=16) (actual time=0.064..0.065 rows=60 loops=1)
+               Buckets: 1024  Batches: 1  Memory Usage: 11kB
+               Buffers: shared hit=5 read=1
+               ->  Bitmap Heap Scan on inventory i  (cost=8.49..15.99 rows=200 width=16) (actual time=0.030..0.049 rows=60 loops=1)
+                     Recheck Cond: (qty_on_hand < reorder_point)
+                     Heap Blocks: exact=5
+                     Buffers: shared hit=5 read=1
+                     ->  Bitmap Index Scan on idx_inventory_at_risk  (cost=0.00..8.44 rows=200 width=0) (actual time=0.023..0.023 rows=60 loops=1)
+                           Buffers: shared read=1
+ Planning:
+   Buffers: shared hit=224
+ Planning Time: 1.125 ms
+ Execution Time: 0.369 ms
+(22개 행)
+
+
+########## 정리 : 테스트 인덱스 삭제 (baseline 유지) ##########
+DROP INDEX
+-- 결론: 600행 규모에선 Seq Scan(5 buffers)이 최적. 부분 인덱스는 대형 테이블+저선택도일 때 의미.

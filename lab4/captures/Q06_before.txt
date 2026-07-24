@@ -1,0 +1,64 @@
+-- Q06 BEFORE : first_order(MIN) + orders self-join(30d window as Join Filter). Execution ~8.5ms, Buffers 142 (orders 2회 Seq Scan)
+화면단위 보기 기능 끔(전체 자료 모두 보여줌).
+html 테이블의 테두리를 2로 지정했습니다.
+Null 값은 "[NULL]" 문자로 보여짐.
+선 모양: unicode.
+작업수행시간 보임
+SET
+작업시간: 0.140 ms
+┌────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                                               QUERY PLAN                                                               │
+├────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ Result  (cost=839.07..839.10 rows=1 width=48) (actual time=7.552..7.558 rows=1 loops=1)                                                │
+│   Buffers: shared hit=142                                                                                                              │
+│   CTE first_order                                                                                                                      │
+│     ->  HashAggregate  (cost=192.00..221.04 rows=2904 width=16) (actual time=1.980..2.327 rows=2246 loops=1)                           │
+│           Group Key: o.customer_id                                                                                                     │
+│           Batches: 1  Memory Usage: 369kB                                                                                              │
+│           Buffers: shared hit=71                                                                                                       │
+│           ->  Seq Scan on orders o  (cost=0.00..165.32 rows=5336 width=16) (actual time=0.011..1.142 rows=5336 loops=1)                │
+│                 Filter: (order_status = ANY ('{paid,shipped,delivered}'::text[]))                                                      │
+│                 Rows Removed by Filter: 1524                                                                                           │
+│                 Buffers: shared hit=71                                                                                                 │
+│   CTE repurchase                                                                                                                       │
+│     ->  HashAggregate  (cost=476.31..478.31 rows=200 width=8) (actual time=3.822..3.932 rows=1121 loops=1)                             │
+│           Group Key: f.customer_id                                                                                                     │
+│           Batches: 1  Memory Usage: 145kB                                                                                              │
+│           Buffers: shared hit=71                                                                                                       │
+│           ->  Hash Join  (cost=232.03..474.87 rows=574 width=8) (actual time=1.875..3.511 rows=1361 loops=1)                           │
+│                 Hash Cond: (f.customer_id = o2.customer_id)                                                                            │
+│                 Join Filter: ((o2.order_ts > f.first_order_ts) AND (o2.order_ts <= (f.first_order_ts + '30 days'::interval)))          │
+│                 Rows Removed by Join Filter: 3975                                                                                      │
+│                 Buffers: shared hit=71                                                                                                 │
+│                 ->  CTE Scan on first_order f  (cost=0.00..58.08 rows=2904 width=16) (actual time=0.000..0.150 rows=2246 loops=1)      │
+│                 ->  Hash  (cost=165.32..165.32 rows=5336 width=16) (actual time=1.849..1.850 rows=5336 loops=1)                        │
+│                       Buckets: 8192  Batches: 1  Memory Usage: 315kB                                                                   │
+│                       Buffers: shared hit=71                                                                                           │
+│                       ->  Seq Scan on orders o2  (cost=0.00..165.32 rows=5336 width=16) (actual time=0.004..1.242 rows=5336 loops=1)   │
+│                             Filter: (order_status = ANY ('{paid,shipped,delivered}'::text[]))                                          │
+│                             Rows Removed by Filter: 1524                                                                               │
+│                             Buffers: shared hit=71                                                                                     │
+│   InitPlan 3                                                                                                                           │
+│     ->  Aggregate  (cost=65.34..65.35 rows=1 width=8) (actual time=2.981..2.982 rows=1 loops=1)                                        │
+│           Buffers: shared hit=71                                                                                                       │
+│           ->  CTE Scan on first_order  (cost=0.00..58.08 rows=2904 width=0) (actual time=1.981..2.832 rows=2246 loops=1)               │
+│                 Buffers: shared hit=71                                                                                                 │
+│   InitPlan 4                                                                                                                           │
+│     ->  Aggregate  (cost=4.50..4.51 rows=1 width=8) (actual time=4.170..4.170 rows=1 loops=1)                                          │
+│           Buffers: shared hit=71                                                                                                       │
+│           ->  CTE Scan on repurchase  (cost=0.00..4.00 rows=200 width=0) (actual time=3.823..4.112 rows=1121 loops=1)                  │
+│                 Buffers: shared hit=71                                                                                                 │
+│   InitPlan 5                                                                                                                           │
+│     ->  Aggregate  (cost=4.50..4.51 rows=1 width=8) (actual time=0.133..0.133 rows=1 loops=1)                                          │
+│           ->  CTE Scan on repurchase repurchase_1  (cost=0.00..4.00 rows=200 width=0) (actual time=0.000..0.074 rows=1121 loops=1)     │
+│   InitPlan 6                                                                                                                           │
+│     ->  Aggregate  (cost=65.34..65.35 rows=1 width=8) (actual time=0.245..0.245 rows=1 loops=1)                                        │
+│           ->  CTE Scan on first_order first_order_1  (cost=0.00..58.08 rows=2904 width=0) (actual time=0.000..0.130 rows=2246 loops=1) │
+│ Planning:                                                                                                                              │
+│   Buffers: shared hit=305                                                                                                              │
+│ Planning Time: 1.299 ms                                                                                                                │
+│ Execution Time: 7.741 ms                                                                                                               │
+└────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+(49개 행)
+
+작업시간: 10.491 ms

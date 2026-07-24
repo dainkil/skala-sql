@@ -1,0 +1,34 @@
+-- Q06 AFTER : single Seq Scan → WindowAgg(MIN OVER) → GroupAggregate. self-join·중복 스캔 제거. Execution ~6.0ms, Buffers 74
+화면단위 보기 기능 끔(전체 자료 모두 보여줌).
+html 테이블의 테두리를 2로 지정했습니다.
+Null 값은 "[NULL]" 문자로 보여짐.
+선 모양: unicode.
+작업수행시간 보임
+SET
+작업시간: 0.080 ms
+┌───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                                            QUERY PLAN                                                             │
+├───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ Aggregate  (cost=714.09..714.12 rows=1 width=48) (actual time=5.228..5.231 rows=1 loops=1)                                        │
+│   Buffers: shared hit=74                                                                                                          │
+│   ->  GroupAggregate  (cost=495.68..679.08 rows=2334 width=9) (actual time=1.770..5.052 rows=2246 loops=1)                        │
+│         Group Key: o.customer_id                                                                                                  │
+│         Buffers: shared hit=74                                                                                                    │
+│         ->  WindowAgg  (cost=495.68..589.04 rows=5336 width=24) (actual time=1.749..3.721 rows=5336 loops=1)                      │
+│               Buffers: shared hit=74                                                                                              │
+│               ->  Sort  (cost=495.66..509.00 rows=5336 width=16) (actual time=1.737..1.950 rows=5336 loops=1)                     │
+│                     Sort Key: o.customer_id                                                                                       │
+│                     Sort Method: quicksort  Memory: 359kB                                                                         │
+│                     Buffers: shared hit=74                                                                                        │
+│                     ->  Seq Scan on orders o  (cost=0.00..165.32 rows=5336 width=16) (actual time=0.007..1.125 rows=5336 loops=1) │
+│                           Filter: (order_status = ANY ('{paid,shipped,delivered}'::text[]))                                       │
+│                           Rows Removed by Filter: 1524                                                                            │
+│                           Buffers: shared hit=71                                                                                  │
+│ Planning:                                                                                                                         │
+│   Buffers: shared hit=209                                                                                                         │
+│ Planning Time: 0.741 ms                                                                                                           │
+│ Execution Time: 5.285 ms                                                                                                          │
+└───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+(19개 행)
+
+작업시간: 6.888 ms

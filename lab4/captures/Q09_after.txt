@@ -1,0 +1,54 @@
+-- Q09 AFTER : 매출=조인 후 HashAggregate 2그룹(COUNT DISTINCT·Sort 없음) / 주문수=orders 단독 HashAggregate 2그룹. 2×2 조인. Execution ~6.95ms(~57%↓).
+-- 전제: 품목 없는 매출상태 주문 0건 → orders 단독 COUNT(*) == 조인 COUNT(DISTINCT). (검증 완료)
+화면단위 보기 기능 끔(전체 자료 모두 보여줌).
+html 테이블의 테두리를 2로 지정했습니다.
+Null 값은 "[NULL]" 문자로 보여짐.
+선 모양: unicode.
+작업수행시간 보임
+SET
+작업시간: 0.048 ms
+┌─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                                                   QUERY PLAN                                                                    │
+├─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ Sort  (cost=914.02..914.02 rows=2 width=104) (actual time=6.705..6.707 rows=2 loops=1)                                                          │
+│   Sort Key: (CASE WHEN ((o.coupon_code IS NULL)) THEN '미사용'::text ELSE '사용'::text END)                                                     │
+│   Sort Method: quicksort  Memory: 25kB                                                                                                          │
+│   Buffers: shared hit=326                                                                                                                       │
+│   ->  Hash Join  (cost=913.93..914.01 rows=2 width=104) (actual time=6.684..6.686 rows=2 loops=1)                                               │
+│         Hash Cond: (((orders.coupon_code IS NULL)) = ((o.coupon_code IS NULL)))                                                                 │
+│         Buffers: shared hit=323                                                                                                                 │
+│         ->  HashAggregate  (cost=192.00..192.03 rows=2 width=9) (actual time=0.904..0.904 rows=2 loops=1)                                       │
+│               Group Key: (orders.coupon_code IS NULL)                                                                                           │
+│               Batches: 1  Memory Usage: 24kB                                                                                                    │
+│               Buffers: shared hit=71                                                                                                            │
+│               ->  Seq Scan on orders  (cost=0.00..165.32 rows=5336 width=1) (actual time=0.004..0.615 rows=5336 loops=1)                        │
+│                     Filter: (order_status = ANY ('{paid,shipped,delivered}'::text[]))                                                           │
+│                     Rows Removed by Filter: 1524                                                                                                │
+│                     Buffers: shared hit=71                                                                                                      │
+│         ->  Hash  (cost=721.90..721.90 rows=2 width=33) (actual time=5.775..5.776 rows=2 loops=1)                                               │
+│               Buckets: 1024  Batches: 1  Memory Usage: 9kB                                                                                      │
+│               Buffers: shared hit=252                                                                                                           │
+│               ->  HashAggregate  (cost=721.88..721.90 rows=2 width=33) (actual time=5.773..5.774 rows=2 loops=1)                                │
+│                     Group Key: (o.coupon_code IS NULL)                                                                                          │
+│                     Batches: 1  Memory Usage: 24kB                                                                                              │
+│                     Buffers: shared hit=252                                                                                                     │
+│                     ->  Hash Join  (cost=232.03..649.15 rows=14546 width=7) (actual time=0.838..4.221 rows=14522 loops=1)                       │
+│                           Hash Cond: (oi.order_id = o.order_id)                                                                                 │
+│                           Buffers: shared hit=252                                                                                               │
+│                           ->  Seq Scan on order_items oi  (cost=0.00..368.00 rows=18700 width=14) (actual time=0.001..0.976 rows=18700 loops=1) │
+│                                 Buffers: shared hit=181                                                                                         │
+│                           ->  Hash  (cost=165.32..165.32 rows=5336 width=15) (actual time=0.829..0.829 rows=5336 loops=1)                       │
+│                                 Buckets: 8192  Batches: 1  Memory Usage: 283kB                                                                  │
+│                                 Buffers: shared hit=71                                                                                          │
+│                                 ->  Seq Scan on orders o  (cost=0.00..165.32 rows=5336 width=15) (actual time=0.001..0.569 rows=5336 loops=1)   │
+│                                       Filter: (order_status = ANY ('{paid,shipped,delivered}'::text[]))                                         │
+│                                       Rows Removed by Filter: 1524                                                                              │
+│                                       Buffers: shared hit=71                                                                                    │
+│ Planning:                                                                                                                                       │
+│   Buffers: shared hit=322                                                                                                                       │
+│ Planning Time: 0.511 ms                                                                                                                         │
+│ Execution Time: 6.766 ms                                                                                                                        │
+└─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+(38개 행)
+
+작업시간: 7.758 ms

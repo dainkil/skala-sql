@@ -1,0 +1,61 @@
+-- Q10 AFTER : 랭킹을 mv_customer_rev.monetary(Q05 MV) 로 대체 → customer_total 대전집계(18,700 조인) 제거. PERCENT_RANK는 MV 2,246행에만. revenue_60d 만 실데이터 조인(항상 최신). Execution ~7.06ms(~51%↓), Buffers 517→282. mismatch 0.
+-- 남은 비용: revenue_60d 의 order_items 스캔(line_total 필요라 불가피). 랭킹 기준(누적매출)은 MV 신선도에 의존(REFRESH 15:00), 최근60일 매출은 실데이터라 항상 최신.
+화면단위 보기 기능 끔(전체 자료 모두 보여줌).
+html 테이블의 테두리를 2로 지정했습니다.
+Null 값은 "[NULL]" 문자로 보여짐.
+선 모양: unicode.
+작업수행시간 보임
+SET
+작업시간: 0.084 ms
+┌───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                                                              QUERY PLAN                                                                               │
+├───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ Sort  (cost=982.79..984.67 rows=749 width=46) (actual time=5.547..5.552 rows=23 loops=1)                                                                              │
+│   Sort Key: ranked.total_revenue DESC                                                                                                                                 │
+│   Sort Method: quicksort  Memory: 26kB                                                                                                                                │
+│   Buffers: shared hit=282                                                                                                                                             │
+│   ->  HashAggregate  (cost=937.67..947.03 rows=749 width=46) (actual time=5.521..5.531 rows=23 loops=1)                                                               │
+│         Group Key: ranked.total_revenue, ranked.customer_id                                                                                                           │
+│         Batches: 1  Memory Usage: 57kB                                                                                                                                │
+│         Buffers: shared hit=279                                                                                                                                       │
+│         ->  Hash Right Join  (cost=463.81..922.36 rows=2042 width=20) (actual time=2.376..5.209 rows=1502 loops=1)                                                    │
+│               Hash Cond: (oi.order_id = o.order_id)                                                                                                                   │
+│               Buffers: shared hit=279                                                                                                                                 │
+│               ->  Seq Scan on order_items oi  (cost=0.00..368.00 rows=18700 width=14) (actual time=0.005..1.356 rows=18700 loops=1)                                   │
+│                     Buffers: shared hit=181                                                                                                                           │
+│               ->  Hash  (cost=454.45..454.45 rows=749 width=22) (actual time=2.365..2.366 rows=523 loops=1)                                                           │
+│                     Buckets: 1024  Batches: 1  Memory Usage: 41kB                                                                                                     │
+│                     Buffers: shared hit=98                                                                                                                            │
+│                     ->  Hash Right Join  (cost=303.93..454.45 rows=749 width=22) (actual time=1.633..2.291 rows=523 loops=1)                                          │
+│                           Hash Cond: (o.customer_id = ranked.customer_id)                                                                                             │
+│                           Buffers: shared hit=98                                                                                                                      │
+│                           ->  Bitmap Heap Scan on orders o  (cost=62.70..195.16 rows=2892 width=16) (actual time=0.127..0.542 rows=2939 loops=1)                      │
+│                                 Recheck Cond: ((order_ts >= (now() - '60 days'::interval)) AND (order_status = ANY ('{paid,shipped,delivered}'::text[])))             │
+│                                 Heap Blocks: exact=71                                                                                                                 │
+│                                 Buffers: shared hit=81                                                                                                                │
+│                                 ->  Bitmap Index Scan on idx_orders_rev_ts  (cost=0.00..61.98 rows=2892 width=0) (actual time=0.116..0.116 rows=2939 loops=1)         │
+│                                       Index Cond: (order_ts >= (now() - '60 days'::interval))                                                                         │
+│                                       Buffers: shared hit=10                                                                                                          │
+│                           ->  Hash  (cost=231.87..231.87 rows=749 width=14) (actual time=1.500..1.500 rows=23 loops=1)                                                │
+│                                 Buckets: 1024  Batches: 1  Memory Usage: 10kB                                                                                         │
+│                                 Buffers: shared hit=17                                                                                                                │
+│                                 ->  Subquery Scan on ranked  (cost=164.50..231.87 rows=749 width=14) (actual time=1.485..1.493 rows=23 loops=1)                       │
+│                                       Filter: (ranked.pr >= '0.99'::double precision)                                                                                 │
+│                                       Rows Removed by Filter: 2223                                                                                                    │
+│                                       Buffers: shared hit=17                                                                                                          │
+│                                       ->  WindowAgg  (cost=164.50..203.79 rows=2246 width=22) (actual time=0.835..1.403 rows=2246 loops=1)                            │
+│                                             Buffers: shared hit=17                                                                                                    │
+│                                             ->  Sort  (cost=164.49..170.10 rows=2246 width=14) (actual time=0.656..0.728 rows=2246 loops=1)                           │
+│                                                   Sort Key: mv_customer_rev.monetary                                                                                  │
+│                                                   Sort Method: quicksort  Memory: 167kB                                                                               │
+│                                                   Buffers: shared hit=17                                                                                              │
+│                                                   ->  Seq Scan on mv_customer_rev  (cost=0.00..39.46 rows=2246 width=14) (actual time=0.007..0.217 rows=2246 loops=1) │
+│                                                         Buffers: shared hit=17                                                                                        │
+│ Planning:                                                                                                                                                             │
+│   Buffers: shared hit=344                                                                                                                                             │
+│ Planning Time: 1.118 ms                                                                                                                                               │
+│ Execution Time: 5.625 ms                                                                                                                                              │
+└───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+(45개 행)
+
+작업시간: 7.854 ms

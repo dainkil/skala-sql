@@ -1,0 +1,95 @@
+======================================================================
+ Q09 JOIN 전략 비교 — order_items(18,700) ⋈ orders(매출상태 5,336) → 14,522행
+   ※ 세 방식 모두 위에 COUNT(DISTINCT) 용 Sort(14,522행)가 얹혀 지배적.
+     튜닝 후(후보2)는 그 Sort 자체를 제거(2그룹 HashAggregate) → 조인전략과 무관하게 개선.
+   요약(2회차, 조인 노드 기준):
+     HJ(선택)  join cost 649   Buffers 260     ~11ms   ← cost 최소
+     NLJ       join cost 3019  Buffers 16176   ~12ms   ← orders 룩업, Buffers 62배 폭발
+     SMJ       join cost 1113  Buffers 315     ~8ms    ← order_id 정렬 이용(idx_order_items_order), wall은 빠르나 cost는 HJ보다↑
+======================================================================
+
+########## HJ ##########
+                                                             QUERY PLAN                                                              
+-------------------------------------------------------------------------------------------------------------------------------------
+ GroupAggregate  (cost=1654.88..1800.37 rows=2 width=41) (actual time=8.930..10.120 rows=2 loops=1)
+   Group Key: ((o.coupon_code IS NULL))
+   Buffers: shared hit=260
+   ->  Sort  (cost=1654.88..1691.25 rows=14546 width=15) (actual time=8.396..8.870 rows=14522 loops=1)
+         Sort Key: ((o.coupon_code IS NULL)), o.order_id
+         Sort Method: quicksort  Memory: 952kB
+         Buffers: shared hit=260
+         ->  Hash Join  (cost=232.03..649.15 rows=14546 width=15) (actual time=0.993..4.365 rows=14522 loops=1)
+               Hash Cond: (oi.order_id = o.order_id)
+               Buffers: shared hit=252
+               ->  Seq Scan on order_items oi  (cost=0.00..368.00 rows=18700 width=14) (actual time=0.001..0.888 rows=18700 loops=1)
+                     Buffers: shared hit=181
+               ->  Hash  (cost=165.32..165.32 rows=5336 width=15) (actual time=0.985..0.985 rows=5336 loops=1)
+                     Buckets: 8192  Batches: 1  Memory Usage: 283kB
+                     Buffers: shared hit=71
+                     ->  Seq Scan on orders o  (cost=0.00..165.32 rows=5336 width=15) (actual time=0.002..0.685 rows=5336 loops=1)
+                           Filter: (order_status = ANY ('{paid,shipped,delivered}'::text[]))
+                           Rows Removed by Filter: 1524
+                           Buffers: shared hit=71
+ Planning:
+   Buffers: shared hit=303
+ Planning Time: 0.420 ms
+ Execution Time: 10.151 ms
+(23개 행)
+
+
+########## NLJ ##########
+SET
+SET
+                                                                         QUERY PLAN                                                                         
+------------------------------------------------------------------------------------------------------------------------------------------------------------
+ GroupAggregate  (cost=4025.38..4170.86 rows=2 width=41) (actual time=10.481..11.549 rows=2 loops=1)
+   Group Key: ((o.coupon_code IS NULL))
+   Buffers: shared hit=16176
+   ->  Sort  (cost=4025.38..4061.74 rows=14546 width=15) (actual time=10.006..10.426 rows=14522 loops=1)
+         Sort Key: ((o.coupon_code IS NULL)), o.order_id
+         Sort Method: quicksort  Memory: 952kB
+         Buffers: shared hit=16176
+         ->  Nested Loop  (cost=0.29..3019.64 rows=14546 width=15) (actual time=0.007..6.441 rows=14522 loops=1)
+               Buffers: shared hit=16168
+               ->  Seq Scan on orders o  (cost=0.00..165.32 rows=5336 width=15) (actual time=0.003..0.758 rows=5336 loops=1)
+                     Filter: (order_status = ANY ('{paid,shipped,delivered}'::text[]))
+                     Rows Removed by Filter: 1524
+                     Buffers: shared hit=71
+               ->  Index Scan using idx_order_items_order on order_items oi  (cost=0.29..0.50 rows=3 width=14) (actual time=0.001..0.001 rows=3 loops=5336)
+                     Index Cond: (order_id = o.order_id)
+                     Buffers: shared hit=16097
+ Planning:
+   Buffers: shared hit=279
+ Planning Time: 0.349 ms
+ Execution Time: 11.579 ms
+(20개 행)
+
+
+########## SMJ ##########
+SET
+SET
+                                                                            QUERY PLAN                                                                             
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ GroupAggregate  (cost=2118.98..2264.46 rows=2 width=41) (actual time=7.645..8.553 rows=2 loops=1)
+   Group Key: ((o.coupon_code IS NULL))
+   Buffers: shared hit=315
+   ->  Sort  (cost=2118.98..2155.34 rows=14546 width=15) (actual time=7.219..7.598 rows=14522 loops=1)
+         Sort Key: ((o.coupon_code IS NULL)), o.order_id
+         Sort Method: quicksort  Memory: 952kB
+         Buffers: shared hit=315
+         ->  Merge Join  (cost=0.57..1113.24 rows=14546 width=15) (actual time=0.014..4.307 rows=14522 loops=1)
+               Merge Cond: (o.order_id = oi.order_id)
+               Buffers: shared hit=310
+               ->  Index Scan using orders_pkey on orders o  (cost=0.28..286.91 rows=5336 width=15) (actual time=0.005..0.967 rows=5336 loops=1)
+                     Filter: (order_status = ANY ('{paid,shipped,delivered}'::text[]))
+                     Rows Removed by Filter: 1524
+                     Buffers: shared hit=91
+               ->  Index Scan using idx_order_items_order on order_items oi  (cost=0.29..620.79 rows=18700 width=14) (actual time=0.006..1.468 rows=18700 loops=1)
+                     Buffers: shared hit=219
+ Planning:
+   Buffers: shared hit=303
+ Planning Time: 0.590 ms
+ Execution Time: 8.597 ms
+(20개 행)
+
+

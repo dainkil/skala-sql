@@ -1,0 +1,80 @@
+화면단위 보기 기능 끔(전체 자료 모두 보여줌).
+html 테이블의 테두리를 2로 지정했습니다.
+Null 값은 "[NULL]" 문자로 보여짐.
+선 모양: unicode.
+작업수행시간 보임
+SET
+작업시간: 0.104 ms
+┌─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                                                                     QUERY PLAN                                                                                      │
+├─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ Limit  (cost=1085.12..1085.15 rows=10 width=80) (actual time=12.157..12.169 rows=10 loops=1)                                                                                        │
+│   Buffers: shared hit=265                                                                                                                                                           │
+│   ->  Sort  (cost=1085.12..1088.76 rows=1456 width=80) (actual time=12.156..12.162 rows=10 loops=1)                                                                                 │
+│         Sort Key: (sum(oi.line_total)) DESC                                                                                                                                         │
+│         Sort Method: quicksort  Memory: 25kB                                                                                                                                        │
+│         Buffers: shared hit=265                                                                                                                                                     │
+│         ->  HashAggregate  (cost=1035.46..1053.66 rows=1456 width=80) (actual time=12.125..12.136 rows=10 loops=1)                                                                  │
+│               Group Key: c.category_id, r.path                                                                                                                                      │
+│               Batches: 1  Memory Usage: 73kB                                                                                                                                        │
+│               Buffers: shared hit=262                                                                                                                                               │
+│               ->  Hash Join  (cost=347.66..921.49 rows=11397 width=50) (actual time=4.120..9.750 rows=11502 loops=1)                                                                │
+│                     Hash Cond: (oi.product_id = p.product_id)                                                                                                                       │
+│                     Buffers: shared hit=262                                                                                                                                         │
+│                     ->  Hash Join  (cost=286.19..703.31 rows=11397 width=18) (actual time=3.768..7.693 rows=11502 loops=1)                                                          │
+│                           Hash Cond: (oi.order_id = o.order_id)                                                                                                                     │
+│                           Buffers: shared hit=252                                                                                                                                   │
+│                           ->  Seq Scan on order_items oi  (cost=0.00..368.00 rows=18700 width=26) (actual time=0.006..1.296 rows=18700 loops=1)                                     │
+│                                 Buffers: shared hit=181                                                                                                                             │
+│                           ->  Hash  (cost=233.93..233.93 rows=4181 width=8) (actual time=3.741..3.741 rows=4225 loops=1)                                                            │
+│                                 Buckets: 8192  Batches: 1  Memory Usage: 230kB                                                                                                      │
+│                                 Buffers: shared hit=71                                                                                                                              │
+│                                 ->  Seq Scan on orders o  (cost=0.00..233.93 rows=4181 width=8) (actual time=0.009..3.233 rows=4225 loops=1)                                        │
+│                                       Filter: ((order_status = ANY ('{paid,shipped,delivered}'::text[])) AND (order_ts >= (date_trunc('day'::text, now()) - '90 days'::interval)))  │
+│                                       Rows Removed by Filter: 2635                                                                                                                  │
+│                                       Buffers: shared hit=71                                                                                                                        │
+│                     ->  Hash  (cost=53.97..53.97 rows=600 width=48) (actual time=0.340..0.344 rows=600 loops=1)                                                                     │
+│                           Buckets: 1024  Batches: 1  Memory Usage: 48kB                                                                                                             │
+│                           Buffers: shared hit=10                                                                                                                                    │
+│                           ->  Hash Join  (cost=32.72..53.97 rows=600 width=48) (actual time=0.077..0.261 rows=600 loops=1)                                                          │
+│                                 Hash Cond: (p.category_id = c.category_id)                                                                                                          │
+│                                 Buffers: shared hit=10                                                                                                                              │
+│                                 ->  Seq Scan on products p  (cost=0.00..13.00 rows=600 width=16) (actual time=0.006..0.066 rows=600 loops=1)                                        │
+│                                       Buffers: shared hit=7                                                                                                                         │
+│                                 ->  Hash  (cost=32.55..32.55 rows=14 width=48) (actual time=0.064..0.066 rows=14 loops=1)                                                           │
+│                                       Buckets: 1024  Batches: 1  Memory Usage: 9kB                                                                                                  │
+│                                       Buffers: shared hit=3                                                                                                                         │
+│                                       ->  Hash Join  (cost=29.15..32.55 rows=14 width=48) (actual time=0.021..0.061 rows=14 loops=1)                                                │
+│                                             Hash Cond: (r.category_id = c.category_id)                                                                                              │
+│                                             Buffers: shared hit=3                                                                                                                   │
+│                                             ->  CTE Scan on r  (cost=27.83..29.91 rows=104 width=80) (actual time=0.005..0.041 rows=14 loops=1)                                     │
+│                                                   Buffers: shared hit=2                                                                                                             │
+│                                                   CTE r                                                                                                                             │
+│                                                     ->  Recursive Union  (cost=0.00..27.83 rows=104 width=56) (actual time=0.003..0.034 rows=14 loops=1)                            │
+│                                                           Buffers: shared hit=2                                                                                                     │
+│                                                           ->  Seq Scan on categories  (cost=0.00..1.14 rows=4 width=32) (actual time=0.003..0.004 rows=4 loops=1)                   │
+│                                                                 Filter: (parent_id IS NULL)                                                                                         │
+│                                                                 Rows Removed by Filter: 10                                                                                          │
+│                                                                 Buffers: shared hit=1                                                                                               │
+│                                                           ->  Hash Join  (cost=1.32..2.57 rows=10 width=56) (actual time=0.010..0.012 rows=5 loops=2)                               │
+│                                                                 Hash Cond: (r_1.category_id = c_1.parent_id)                                                                        │
+│                                                                 Buffers: shared hit=1                                                                                               │
+│                                                                 ->  WorkTable Scan on r r_1  (cost=0.00..0.80 rows=40 width=40) (actual time=0.000..0.001 rows=7 loops=2)           │
+│                                                                 ->  Hash  (cost=1.14..1.14 rows=14 width=24) (actual time=0.007..0.008 rows=10 loops=1)                             │
+│                                                                       Buckets: 1024  Batches: 1  Memory Usage: 9kB                                                                  │
+│                                                                       Buffers: shared hit=1                                                                                         │
+│                                                                       ->  Seq Scan on categories c_1  (cost=0.00..1.14 rows=14 width=24) (actual time=0.002..0.003 rows=14 loops=1) │
+│                                                                             Buffers: shared hit=1                                                                                   │
+│                                             ->  Hash  (cost=1.14..1.14 rows=14 width=8) (actual time=0.009..0.010 rows=14 loops=1)                                                  │
+│                                                   Buckets: 1024  Batches: 1  Memory Usage: 9kB                                                                                      │
+│                                                   Buffers: shared hit=1                                                                                                             │
+│                                                   ->  Seq Scan on categories c  (cost=0.00..1.14 rows=14 width=8) (actual time=0.003..0.004 rows=14 loops=1)                        │
+│                                                         Buffers: shared hit=1                                                                                                       │
+│ Planning:                                                                                                                                                                           │
+│   Buffers: shared hit=389                                                                                                                                                           │
+│ Planning Time: 2.614 ms                                                                                                                                                             │
+│ Execution Time: 12.346 ms                                                                                                                                                           │
+└─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+(66개 행)
+
+작업시간: 16.503 ms

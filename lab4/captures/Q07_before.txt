@@ -1,0 +1,36 @@
+-- Q07 BASELINE : inventory Seq Scan(600→60) → Hash Join products → Sort. 이미 ~0.4ms, Buffers 18.
+-- 참고: 필터 추정 rows=200 vs 실제 60 (두 컬럼 비교라 기본 선택도 사용, 통계 미반영). 규모가 작아 무해.
+화면단위 보기 기능 끔(전체 자료 모두 보여줌).
+html 테이블의 테두리를 2로 지정했습니다.
+Null 값은 "[NULL]" 문자로 보여짐.
+선 모양: unicode.
+작업수행시간 보임
+SET
+작업시간: 0.181 ms
+┌────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                                         QUERY PLAN                                                         │
+├────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ Sort  (cost=37.73..38.23 rows=200 width=43) (actual time=0.387..0.397 rows=60 loops=1)                                     │
+│   Sort Key: ((i.reorder_point - i.qty_on_hand)) DESC, i.product_id                                                         │
+│   Sort Method: quicksort  Memory: 28kB                                                                                     │
+│   Buffers: shared hit=18                                                                                                   │
+│   ->  Hash Join  (cost=15.00..30.09 rows=200 width=43) (actual time=0.150..0.334 rows=60 loops=1)                          │
+│         Hash Cond: (p.product_id = i.product_id)                                                                           │
+│         Buffers: shared hit=12                                                                                             │
+│         ->  Seq Scan on products p  (cost=0.00..13.00 rows=600 width=31) (actual time=0.010..0.094 rows=600 loops=1)       │
+│               Buffers: shared hit=7                                                                                        │
+│         ->  Hash  (cost=12.50..12.50 rows=200 width=16) (actual time=0.126..0.127 rows=60 loops=1)                         │
+│               Buckets: 1024  Batches: 1  Memory Usage: 11kB                                                                │
+│               Buffers: shared hit=5                                                                                        │
+│               ->  Seq Scan on inventory i  (cost=0.00..12.50 rows=200 width=16) (actual time=0.013..0.103 rows=60 loops=1) │
+│                     Filter: (qty_on_hand < reorder_point)                                                                  │
+│                     Rows Removed by Filter: 540                                                                            │
+│                     Buffers: shared hit=5                                                                                  │
+│ Planning:                                                                                                                  │
+│   Buffers: shared hit=205                                                                                                  │
+│ Planning Time: 1.245 ms                                                                                                    │
+│ Execution Time: 0.481 ms                                                                                                   │
+└────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+(20개 행)
+
+작업시간: 2.971 ms

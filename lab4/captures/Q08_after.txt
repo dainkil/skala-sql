@@ -1,0 +1,40 @@
+-- Q08 AFTER : reviews 먼저 집계(단일 컬럼 GROUP BY)+HAVING → 12개만 products와 조인. Execution ~0.79ms(~59%↓).
+-- 커버링 인덱스 reviews(product_id) INCLUDE(rating) 는 2031행이라 Seq Scan에 밀려 미사용(생략).
+화면단위 보기 기능 끔(전체 자료 모두 보여줌).
+html 테이블의 테두리를 2로 지정했습니다.
+Null 값은 "[NULL]" 문자로 보여짐.
+선 모양: unicode.
+작업수행시간 보임
+SET
+작업시간: 0.097 ms
+┌─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                                           QUERY PLAN                                                            │
+├─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ Sort  (cost=73.68..73.71 rows=13 width=102) (actual time=0.621..0.625 rows=12 loops=1)                                          │
+│   Sort Key: (avg(reviews.rating)) DESC, (count(*)) DESC                                                                         │
+│   Sort Method: quicksort  Memory: 25kB                                                                                          │
+│   Buffers: shared hit=34                                                                                                        │
+│   ->  Hash Join  (cost=58.82..73.44 rows=13 width=102) (actual time=0.505..0.589 rows=12 loops=1)                               │
+│         Hash Cond: (p.product_id = reviews.product_id)                                                                          │
+│         Buffers: shared hit=28                                                                                                  │
+│         ->  Seq Scan on products p  (cost=0.00..13.00 rows=600 width=30) (actual time=0.006..0.050 rows=600 loops=1)            │
+│               Buffers: shared hit=7                                                                                             │
+│         ->  Hash  (cost=58.66..58.66 rows=13 width=48) (actual time=0.483..0.483 rows=12 loops=1)                               │
+│               Buckets: 1024  Batches: 1  Memory Usage: 9kB                                                                      │
+│               Buffers: shared hit=21                                                                                            │
+│               ->  HashAggregate  (cost=56.54..58.66 rows=13 width=48) (actual time=0.449..0.472 rows=12 loops=1)                │
+│                     Group Key: reviews.product_id                                                                               │
+│                     Filter: ((count(*) >= 50) AND (avg(reviews.rating) >= 4.5))                                                 │
+│                     Batches: 1  Memory Usage: 64kB                                                                              │
+│                     Rows Removed by Filter: 109                                                                                 │
+│                     Buffers: shared hit=21                                                                                      │
+│                     ->  Seq Scan on reviews  (cost=0.00..41.31 rows=2031 width=12) (actual time=0.006..0.139 rows=2031 loops=1) │
+│                           Buffers: shared hit=21                                                                                │
+│ Planning:                                                                                                                       │
+│   Buffers: shared hit=212                                                                                                       │
+│ Planning Time: 0.751 ms                                                                                                         │
+│ Execution Time: 0.707 ms                                                                                                        │
+└─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+(24개 행)
+
+작업시간: 2.278 ms

@@ -1,0 +1,24 @@
+-- Q01 튜닝 전: total_sales + COUNT(DISTINCT o.order_id)
+-- EXPLAIN (ANALYZE, BUFFERS)
+ Aggregate  (cost=904.90..904.91 rows=1 width=40) (actual time=8.277..8.282 rows=1 loops=1)
+   Buffers: shared hit=255
+   ->  Sort  (cost=876.48..885.95 rows=3789 width=14) (actual time=7.569..7.757 rows=3910 loops=1)
+         Sort Key: o.order_id
+         Sort Method: quicksort  Memory: 219kB
+         Buffers: shared hit=255
+         ->  Hash Join  (cost=234.15..651.27 rows=3789 width=14) (actual time=2.537..7.029 rows=3910 loops=1)
+               Hash Cond: (oi.order_id = o.order_id)
+               Buffers: shared hit=252
+               ->  Seq Scan on order_items oi  (cost=0.00..368.00 rows=18700 width=14) (actual time=0.007..2.112 rows=18700 loops=1)
+                     Buffers: shared hit=181
+               ->  Hash  (cost=216.77..216.77 rows=1390 width=8) (actual time=2.450..2.451 rows=1424 loops=1)
+                     Buckets: 2048  Batches: 1  Memory Usage: 72kB
+                     Buffers: shared hit=71
+                     ->  Seq Scan on orders o  (cost=0.00..216.77 rows=1390 width=8) (actual time=0.031..2.274 rows=1424 loops=1)
+                           Filter: ((order_status = ANY ('{paid,shipped,delivered}'::text[])) AND (order_ts >= (now() - '1 mon'::interval)))
+                           Rows Removed by Filter: 5436
+                           Buffers: shared hit=71
+ Planning:
+   Buffers: shared hit=278
+ Planning Time: 3.008 ms
+ Execution Time: 8.360 ms

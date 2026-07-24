@@ -1,0 +1,94 @@
+======================================================================
+ Q08 JOIN 전략 비교 — BEFORE 쿼리의 reviews(2031) ⋈ products(600) on product_id
+   (튜닝 후에는 집계 먼저라 12행만 조인 → 조인 전략 무의미해짐)
+   요약(2회차):
+     HJ(선택)  cost 67.2   Buffers 28    ~1.6ms   ← cost 최소, 플래너 선택
+     NLJ+Memoize cost 130  Buffers 384   ~1.7ms   ← product 룩업 2031 loops(Memoize 캐시), Buffers 13.7배
+     SMJ       cost 219.5  Buffers 31    ~2.3ms   ← reviews 2031행 Sort 필요
+   → HJ 최적. enable_hashjoin=off 만으론 SMJ 아닌 NLJ+Memoize 선택(더 쌈) → SMJ는 nestloop도 off해야 나옴.
+======================================================================
+
+########## HJ (default) ##########
+                                                         QUERY PLAN                                                         
+----------------------------------------------------------------------------------------------------------------------------
+ HashAggregate  (cost=92.56..128.10 rows=226 width=38) (actual time=1.725..1.785 rows=12 loops=1)
+   Group Key: r.product_id, p.sku, p.product_name
+   Filter: ((count(*) >= 50) AND (avg(r.rating) >= 4.5))
+   Batches: 1  Memory Usage: 145kB
+   Rows Removed by Filter: 109
+   Buffers: shared hit=28
+   ->  Hash Join  (cost=20.50..67.17 rows=2031 width=34) (actual time=0.246..0.981 rows=2031 loops=1)
+         Hash Cond: (r.product_id = p.product_id)
+         Buffers: shared hit=28
+         ->  Seq Scan on reviews r  (cost=0.00..41.31 rows=2031 width=12) (actual time=0.005..0.203 rows=2031 loops=1)
+               Buffers: shared hit=21
+         ->  Hash  (cost=13.00..13.00 rows=600 width=30) (actual time=0.226..0.226 rows=600 loops=1)
+               Buckets: 1024  Batches: 1  Memory Usage: 46kB
+               Buffers: shared hit=7
+               ->  Seq Scan on products p  (cost=0.00..13.00 rows=600 width=30) (actual time=0.005..0.102 rows=600 loops=1)
+                     Buffers: shared hit=7
+ Planning:
+   Buffers: shared hit=220
+ Planning Time: 1.232 ms
+ Execution Time: 1.919 ms
+(20개 행)
+
+
+########## NLJ (enable_hashjoin=off, enable_mergejoin=off) ##########
+SET
+SET
+                                                                  QUERY PLAN                                                                   
+-----------------------------------------------------------------------------------------------------------------------------------------------
+ HashAggregate  (cost=155.72..191.27 rows=226 width=38) (actual time=1.725..1.772 rows=12 loops=1)
+   Group Key: r.product_id, p.sku, p.product_name
+   Filter: ((count(*) >= 50) AND (avg(r.rating) >= 4.5))
+   Batches: 1  Memory Usage: 145kB
+   Rows Removed by Filter: 109
+   Buffers: shared hit=384
+   ->  Nested Loop  (cost=0.29..130.34 rows=2031 width=34) (actual time=0.029..1.130 rows=2031 loops=1)
+         Buffers: shared hit=384
+         ->  Seq Scan on reviews r  (cost=0.00..41.31 rows=2031 width=12) (actual time=0.005..0.194 rows=2031 loops=1)
+               Buffers: shared hit=21
+         ->  Memoize  (cost=0.29..0.32 rows=1 width=30) (actual time=0.000..0.000 rows=1 loops=2031)
+               Cache Key: r.product_id
+               Cache Mode: logical
+               Hits: 1910  Misses: 121  Evictions: 0  Overflows: 0  Memory Usage: 17kB
+               Buffers: shared hit=363
+               ->  Index Scan using products_pkey on products p  (cost=0.28..0.31 rows=1 width=30) (actual time=0.001..0.001 rows=1 loops=121)
+                     Index Cond: (product_id = r.product_id)
+                     Buffers: shared hit=363
+ Planning:
+   Buffers: shared hit=196
+ Planning Time: 0.886 ms
+ Execution Time: 1.879 ms
+(22개 행)
+
+
+########## SMJ (enable_hashjoin=off, enable_nestloop=off) ##########
+SET
+SET
+                                                                 QUERY PLAN                                                                 
+--------------------------------------------------------------------------------------------------------------------------------------------
+ HashAggregate  (cost=244.91..280.45 rows=226 width=38) (actual time=1.430..1.486 rows=12 loops=1)
+   Group Key: r.product_id, p.sku, p.product_name
+   Filter: ((count(*) >= 50) AND (avg(r.rating) >= 4.5))
+   Batches: 1  Memory Usage: 145kB
+   Rows Removed by Filter: 109
+   Buffers: shared hit=31
+   ->  Merge Join  (cost=153.47..219.52 rows=2031 width=34) (actual time=0.441..0.890 rows=2031 loops=1)
+         Merge Cond: (p.product_id = r.product_id)
+         Buffers: shared hit=31
+         ->  Index Scan using products_pkey on products p  (cost=0.28..35.27 rows=600 width=30) (actual time=0.007..0.081 rows=591 loops=1)
+               Buffers: shared hit=10
+         ->  Sort  (cost=152.89..157.97 rows=2031 width=12) (actual time=0.428..0.513 rows=2031 loops=1)
+               Sort Key: r.product_id
+               Sort Method: quicksort  Memory: 112kB
+               Buffers: shared hit=21
+               ->  Seq Scan on reviews r  (cost=0.00..41.31 rows=2031 width=12) (actual time=0.006..0.225 rows=2031 loops=1)
+                     Buffers: shared hit=21
+ Planning:
+   Buffers: shared hit=220
+ Planning Time: 0.922 ms
+ Execution Time: 1.592 ms
+(21개 행)
+

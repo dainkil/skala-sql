@@ -1,0 +1,50 @@
+======================================================================
+ Q11 AFTER : 리포트 평균은 safe_div(sql) 로 확정 → 인라인되어 순수 NULLIF와 동일 속도.
+
+ 함수 선택별 Execution(2회차, 같은 쿼리 컬럼만 교체):
+     둘 다(f_safe_div + safe_div)   3.85ms
+     safe_div(sql)만                1.28ms   ← 채택 (인라인)
+     f_safe_div(plpgsql)만          2.87ms   (plpgsql 인라인 불가 → 행당 호출 오버헤드, ~2.2배)
+     인라인 NULLIF                  1.28ms   (safe_div 가 이와 동일 = 완전 인라인 증거)
+ → 결과 semantics: 리뷰 없음은 NULL(safe_div)이 맞음. f_safe_div(0 반환)은 매출/건수형 지표용.
+======================================================================
+
+########## safe_div(sql) 채택안 실행계획 ##########
+화면단위 보기 기능 끔(전체 자료 모두 보여줌).
+html 테이블의 테두리를 2로 지정했습니다.
+Null 값은 "[NULL]" 문자로 보여짐.
+선 모양: unicode.
+작업수행시간 보임
+SET
+작업시간: 0.161 ms
+┌───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                                              QUERY PLAN                                                               │
+├───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ Sort  (cost=113.25..114.75 rows=600 width=59) (actual time=1.837..1.880 rows=600 loops=1)                                             │
+│   Sort Key: (COALESCE(pr.review_count, '0'::bigint)), p.product_id                                                                    │
+│   Sort Method: quicksort  Memory: 54kB                                                                                                │
+│   Buffers: shared hit=31                                                                                                              │
+│   ->  Hash Left Join  (cost=60.48..85.56 rows=600 width=59) (actual time=1.082..1.468 rows=600 loops=1)                               │
+│         Hash Cond: (p.product_id = pr.product_id)                                                                                     │
+│         Buffers: shared hit=28                                                                                                        │
+│         ->  Seq Scan on products p  (cost=0.00..13.00 rows=600 width=19) (actual time=0.008..0.085 rows=600 loops=1)                  │
+│               Buffers: shared hit=7                                                                                                   │
+│         ->  Hash  (cost=58.96..58.96 rows=121 width=24) (actual time=1.053..1.055 rows=121 loops=1)                                   │
+│               Buckets: 1024  Batches: 1  Memory Usage: 15kB                                                                           │
+│               Buffers: shared hit=21                                                                                                  │
+│               ->  Subquery Scan on pr  (cost=56.54..58.96 rows=121 width=24) (actual time=0.968..1.022 rows=121 loops=1)              │
+│                     Buffers: shared hit=21                                                                                            │
+│                     ->  HashAggregate  (cost=56.54..57.75 rows=121 width=24) (actual time=0.968..0.996 rows=121 loops=1)              │
+│                           Group Key: reviews.product_id                                                                               │
+│                           Batches: 1  Memory Usage: 48kB                                                                              │
+│                           Buffers: shared hit=21                                                                                      │
+│                           ->  Seq Scan on reviews  (cost=0.00..41.31 rows=2031 width=12) (actual time=0.005..0.315 rows=2031 loops=1) │
+│                                 Buffers: shared hit=21                                                                                │
+│ Planning:                                                                                                                             │
+│   Buffers: shared hit=420                                                                                                             │
+│ Planning Time: 1.826 ms                                                                                                               │
+│ Execution Time: 2.007 ms                                                                                                              │
+└───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+(24개 행)
+
+작업시간: 4.970 ms

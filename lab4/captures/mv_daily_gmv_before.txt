@@ -1,0 +1,34 @@
+화면단위 보기 기능 끔(전체 자료 모두 보여줌).
+html 테이블의 테두리를 2로 지정했습니다.
+Null 값은 "[NULL]" 문자로 보여짐.
+선 모양: unicode.
+작업수행시간 보임
+SET
+작업시간: 0.155 ms
+┌───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                                          QUERY PLAN                                                           │
+├───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ HashAggregate  (cost=758.24..838.28 rows=5336 width=40) (actual time=12.543..12.583 rows=124 loops=1)                         │
+│   Group Key: date_trunc('day'::text, o.order_ts)                                                                              │
+│   Batches: 1  Memory Usage: 273kB                                                                                             │
+│   Buffers: shared hit=252                                                                                                     │
+│   ->  Hash Join  (cost=232.03..685.51 rows=14546 width=14) (actual time=2.428..9.877 rows=14522 loops=1)                      │
+│         Hash Cond: (oi.order_id = o.order_id)                                                                                 │
+│         Buffers: shared hit=252                                                                                               │
+│         ->  Seq Scan on order_items oi  (cost=0.00..368.00 rows=18700 width=14) (actual time=0.006..1.465 rows=18700 loops=1) │
+│               Buffers: shared hit=181                                                                                         │
+│         ->  Hash  (cost=165.32..165.32 rows=5336 width=16) (actual time=2.389..2.389 rows=5336 loops=1)                       │
+│               Buckets: 8192  Batches: 1  Memory Usage: 315kB                                                                  │
+│               Buffers: shared hit=71                                                                                          │
+│               ->  Seq Scan on orders o  (cost=0.00..165.32 rows=5336 width=16) (actual time=0.011..1.672 rows=5336 loops=1)   │
+│                     Filter: (order_status = ANY ('{paid,shipped,delivered}'::text[]))                                         │
+│                     Rows Removed by Filter: 1524                                                                              │
+│                     Buffers: shared hit=71                                                                                    │
+│ Planning:                                                                                                                     │
+│   Buffers: shared hit=354                                                                                                     │
+│ Planning Time: 1.449 ms                                                                                                       │
+│ Execution Time: 12.725 ms                                                                                                     │
+└───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+(20개 행)
+
+작업시간: 14.920 ms

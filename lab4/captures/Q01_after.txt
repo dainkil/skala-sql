@@ -1,0 +1,32 @@
+화면단위 보기 기능 끔(전체 자료 모두 보여줌).
+html 테이블의 테두리를 2로 지정했습니다.
+Null 값은 "[NULL]" 문자로 보여짐.
+선 모양: unicode.
+작업수행시간 보임
+SET
+작업시간: 0.169 ms
+┌───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                                              QUERY PLAN                                                               │
+├───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ Aggregate  (cost=660.73..660.74 rows=1 width=32) (actual time=4.951..4.954 rows=1 loops=1)                                            │
+│   Buffers: shared hit=252                                                                                                             │
+│   ->  Hash Join  (cost=234.14..651.26 rows=3786 width=6) (actual time=1.668..4.663 rows=3908 loops=1)                                 │
+│         Hash Cond: (oi.order_id = o.order_id)                                                                                         │
+│         Buffers: shared hit=252                                                                                                       │
+│         ->  Seq Scan on order_items oi  (cost=0.00..368.00 rows=18700 width=14) (actual time=0.007..1.201 rows=18700 loops=1)         │
+│               Buffers: shared hit=181                                                                                                 │
+│         ->  Hash  (cost=216.77..216.77 rows=1389 width=8) (actual time=1.646..1.647 rows=1423 loops=1)                                │
+│               Buckets: 2048  Batches: 1  Memory Usage: 72kB                                                                           │
+│               Buffers: shared hit=71                                                                                                  │
+│               ->  Seq Scan on orders o  (cost=0.00..216.77 rows=1389 width=8) (actual time=0.011..1.511 rows=1423 loops=1)            │
+│                     Filter: ((order_status = ANY ('{paid,shipped,delivered}'::text[])) AND (order_ts >= (now() - '1 mon'::interval))) │
+│                     Rows Removed by Filter: 5437                                                                                      │
+│                     Buffers: shared hit=71                                                                                            │
+│ Planning:                                                                                                                             │
+│   Buffers: shared hit=355                                                                                                             │
+│ Planning Time: 1.609 ms                                                                                                               │
+│ Execution Time: 4.991 ms                                                                                                              │
+└───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+(18개 행)
+
+작업시간: 7.355 ms

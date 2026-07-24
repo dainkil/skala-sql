@@ -1,0 +1,178 @@
+화면단위 보기 기능 끔(전체 자료 모두 보여줌).
+html 테이블의 테두리를 2로 지정했습니다.
+Null 값은 "[NULL]" 문자로 보여짐.
+선 모양: unicode.
+작업수행시간 보임
+SET
+작업시간: 0.059 ms
+#### [HJ] 기본 ####
+┌───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                                                                        QUERY PLAN                                                                                         │
+├───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ Sort  (cost=2773.47..2780.73 rows=2904 width=68) (actual time=13.755..13.832 rows=2246 loops=1)                                                                                           │
+│   Sort Key: scored.r_score DESC, scored.f_score DESC, scored.m_score DESC, scored.monetary DESC                                                                                           │
+│   Sort Method: quicksort  Memory: 237kB                                                                                                                                                   │
+│   Buffers: shared hit=264                                                                                                                                                                 │
+│   ->  Subquery Scan on scored  (cost=2475.77..2606.43 rows=2904 width=68) (actual time=10.965..11.491 rows=2246 loops=1)                                                                  │
+│         Buffers: shared hit=258                                                                                                                                                           │
+│         ->  WindowAgg  (cost=2475.77..2548.35 rows=2904 width=72) (actual time=10.963..11.323 rows=2246 loops=1)                                                                          │
+│               Buffers: shared hit=258                                                                                                                                                     │
+│               ->  Sort  (cost=2475.75..2483.01 rows=2904 width=64) (actual time=10.795..10.869 rows=2246 loops=1)                                                                         │
+│                     Sort Key: customer_rfm.last_order_ts                                                                                                                                  │
+│                     Sort Method: quicksort  Memory: 220kB                                                                                                                                 │
+│                     Buffers: shared hit=258                                                                                                                                               │
+│                     ->  WindowAgg  (cost=2257.91..2308.72 rows=2904 width=64) (actual time=10.305..10.452 rows=2246 loops=1)                                                              │
+│                           Buffers: shared hit=255                                                                                                                                         │
+│                           ->  Sort  (cost=2257.90..2265.16 rows=2904 width=60) (actual time=10.197..10.247 rows=2246 loops=1)                                                             │
+│                                 Sort Key: customer_rfm.frequency                                                                                                                          │
+│                                 Sort Method: quicksort  Memory: 220kB                                                                                                                     │
+│                                 Buffers: shared hit=255                                                                                                                                   │
+│                                 ->  WindowAgg  (cost=2040.06..2090.86 rows=2904 width=60) (actual time=9.922..10.044 rows=2246 loops=1)                                                   │
+│                                       Buffers: shared hit=252                                                                                                                             │
+│                                       ->  Sort  (cost=2040.04..2047.30 rows=2904 width=56) (actual time=9.801..9.852 rows=2246 loops=1)                                                   │
+│                                             Sort Key: customer_rfm.monetary                                                                                                               │
+│                                             Sort Method: quicksort  Memory: 202kB                                                                                                         │
+│                                             Buffers: shared hit=252                                                                                                                       │
+│                                             ->  Subquery Scan on customer_rfm  (cost=1654.88..1873.01 rows=2904 width=56) (actual time=6.814..9.429 rows=2246 loops=1)                    │
+│                                                   Buffers: shared hit=252                                                                                                                 │
+│                                                   ->  GroupAggregate  (cost=1654.88..1873.01 rows=2904 width=56) (actual time=6.813..9.275 rows=2246 loops=1)                             │
+│                                                         Group Key: o.customer_id                                                                                                          │
+│                                                         Buffers: shared hit=252                                                                                                           │
+│                                                         ->  Sort  (cost=1654.88..1691.25 rows=14546 width=30) (actual time=6.786..7.292 rows=14522 loops=1)                               │
+│                                                               Sort Key: o.customer_id, o.order_id                                                                                         │
+│                                                               Sort Method: quicksort  Memory: 1065kB                                                                                      │
+│                                                               Buffers: shared hit=252                                                                                                     │
+│                                                               ->  Hash Join  (cost=232.03..649.15 rows=14546 width=30) (actual time=1.466..4.324 rows=14522 loops=1)                      │
+│                                                                     Hash Cond: (oi.order_id = o.order_id)                                                                                 │
+│                                                                     Buffers: shared hit=252                                                                                               │
+│                                                                     ->  Seq Scan on order_items oi  (cost=0.00..368.00 rows=18700 width=14) (actual time=0.002..0.860 rows=18700 loops=1) │
+│                                                                           Buffers: shared hit=181                                                                                         │
+│                                                                     ->  Hash  (cost=165.32..165.32 rows=5336 width=24) (actual time=1.456..1.456 rows=5336 loops=1)                       │
+│                                                                           Buckets: 8192  Batches: 1  Memory Usage: 356kB                                                                  │
+│                                                                           Buffers: shared hit=71                                                                                          │
+│                                                                           ->  Seq Scan on orders o  (cost=0.00..165.32 rows=5336 width=24) (actual time=0.003..1.025 rows=5336 loops=1)   │
+│                                                                                 Filter: (order_status = ANY ('{paid,shipped,delivered}'::text[]))                                         │
+│                                                                                 Rows Removed by Filter: 1524                                                                              │
+│                                                                                 Buffers: shared hit=71                                                                                    │
+│ Planning:                                                                                                                                                                                 │
+│   Buffers: shared hit=325                                                                                                                                                                 │
+│ Planning Time: 0.563 ms                                                                                                                                                                   │
+│ Execution Time: 13.953 ms                                                                                                                                                                 │
+└───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+(49개 행)
+
+작업시간: 15.125 ms
+#### [SMJ] enable_hashjoin=off ####
+SET
+작업시간: 0.023 ms
+┌─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                                                                                       QUERY PLAN                                                                                                        │
+├─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ Sort  (cost=3237.57..3244.83 rows=2904 width=68) (actual time=12.305..12.370 rows=2246 loops=1)                                                                                                                         │
+│   Sort Key: scored.r_score DESC, scored.f_score DESC, scored.m_score DESC, scored.monetary DESC                                                                                                                         │
+│   Sort Method: quicksort  Memory: 237kB                                                                                                                                                                                 │
+│   Buffers: shared hit=310                                                                                                                                                                                               │
+│   ->  Subquery Scan on scored  (cost=2939.87..3070.53 rows=2904 width=68) (actual time=9.711..10.178 rows=2246 loops=1)                                                                                                 │
+│         Buffers: shared hit=310                                                                                                                                                                                         │
+│         ->  WindowAgg  (cost=2939.87..3012.45 rows=2904 width=72) (actual time=9.710..10.026 rows=2246 loops=1)                                                                                                         │
+│               Buffers: shared hit=310                                                                                                                                                                                   │
+│               ->  Sort  (cost=2939.85..2947.11 rows=2904 width=64) (actual time=9.568..9.634 rows=2246 loops=1)                                                                                                         │
+│                     Sort Key: customer_rfm.last_order_ts                                                                                                                                                                │
+│                     Sort Method: quicksort  Memory: 220kB                                                                                                                                                               │
+│                     Buffers: shared hit=310                                                                                                                                                                             │
+│                     ->  WindowAgg  (cost=2722.01..2772.82 rows=2904 width=64) (actual time=9.070..9.235 rows=2246 loops=1)                                                                                              │
+│                           Buffers: shared hit=310                                                                                                                                                                       │
+│                           ->  Sort  (cost=2722.00..2729.26 rows=2904 width=60) (actual time=8.930..8.994 rows=2246 loops=1)                                                                                             │
+│                                 Sort Key: customer_rfm.frequency                                                                                                                                                        │
+│                                 Sort Method: quicksort  Memory: 220kB                                                                                                                                                   │
+│                                 Buffers: shared hit=310                                                                                                                                                                 │
+│                                 ->  WindowAgg  (cost=2504.16..2554.96 rows=2904 width=60) (actual time=8.620..8.779 rows=2246 loops=1)                                                                                  │
+│                                       Buffers: shared hit=310                                                                                                                                                           │
+│                                       ->  Sort  (cost=2504.14..2511.40 rows=2904 width=56) (actual time=8.470..8.537 rows=2246 loops=1)                                                                                 │
+│                                             Sort Key: customer_rfm.monetary                                                                                                                                             │
+│                                             Sort Method: quicksort  Memory: 202kB                                                                                                                                       │
+│                                             Buffers: shared hit=310                                                                                                                                                     │
+│                                             ->  Subquery Scan on customer_rfm  (cost=2118.98..2337.10 rows=2904 width=56) (actual time=5.983..8.108 rows=2246 loops=1)                                                  │
+│                                                   Buffers: shared hit=310                                                                                                                                               │
+│                                                   ->  GroupAggregate  (cost=2118.98..2337.10 rows=2904 width=56) (actual time=5.983..7.980 rows=2246 loops=1)                                                           │
+│                                                         Group Key: o.customer_id                                                                                                                                        │
+│                                                         Buffers: shared hit=310                                                                                                                                         │
+│                                                         ->  Sort  (cost=2118.98..2155.34 rows=14546 width=30) (actual time=5.973..6.382 rows=14522 loops=1)                                                             │
+│                                                               Sort Key: o.customer_id, o.order_id                                                                                                                       │
+│                                                               Sort Method: quicksort  Memory: 1065kB                                                                                                                    │
+│                                                               Buffers: shared hit=310                                                                                                                                   │
+│                                                               ->  Merge Join  (cost=0.57..1113.24 rows=14546 width=30) (actual time=0.012..3.893 rows=14522 loops=1)                                                    │
+│                                                                     Merge Cond: (o.order_id = oi.order_id)                                                                                                              │
+│                                                                     Buffers: shared hit=310                                                                                                                             │
+│                                                                     ->  Index Scan using orders_pkey on orders o  (cost=0.28..286.91 rows=5336 width=24) (actual time=0.005..0.881 rows=5336 loops=1)                   │
+│                                                                           Filter: (order_status = ANY ('{paid,shipped,delivered}'::text[]))                                                                             │
+│                                                                           Rows Removed by Filter: 1524                                                                                                                  │
+│                                                                           Buffers: shared hit=91                                                                                                                        │
+│                                                                     ->  Index Scan using idx_order_items_order on order_items oi  (cost=0.29..620.79 rows=18700 width=14) (actual time=0.006..1.219 rows=18700 loops=1) │
+│                                                                           Buffers: shared hit=219                                                                                                                       │
+│ Planning:                                                                                                                                                                                                               │
+│   Buffers: shared hit=12                                                                                                                                                                                                │
+│ Planning Time: 0.141 ms                                                                                                                                                                                                 │
+│ Execution Time: 12.460 ms                                                                                                                                                                                               │
+└─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+(46개 행)
+
+작업시간: 12.759 ms
+#### [NLJ] hash+merge off ####
+SET
+작업시간: 0.024 ms
+┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                                                                                    QUERY PLAN                                                                                                    │
+├──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ Sort  (cost=4921.17..4928.43 rows=2904 width=68) (actual time=13.909..13.963 rows=2246 loops=1)                                                                                                                  │
+│   Sort Key: scored.r_score DESC, scored.f_score DESC, scored.m_score DESC, scored.monetary DESC                                                                                                                  │
+│   Sort Method: quicksort  Memory: 237kB                                                                                                                                                                          │
+│   Buffers: shared hit=21452                                                                                                                                                                                      │
+│   ->  Subquery Scan on scored  (cost=4623.47..4754.13 rows=2904 width=68) (actual time=11.754..12.164 rows=2246 loops=1)                                                                                         │
+│         Buffers: shared hit=21452                                                                                                                                                                                │
+│         ->  WindowAgg  (cost=4623.47..4696.05 rows=2904 width=72) (actual time=11.753..12.033 rows=2246 loops=1)                                                                                                 │
+│               Buffers: shared hit=21452                                                                                                                                                                          │
+│               ->  Sort  (cost=4623.45..4630.71 rows=2904 width=64) (actual time=11.625..11.683 rows=2246 loops=1)                                                                                                │
+│                     Sort Key: customer_rfm.last_order_ts                                                                                                                                                         │
+│                     Sort Method: quicksort  Memory: 220kB                                                                                                                                                        │
+│                     Buffers: shared hit=21452                                                                                                                                                                    │
+│                     ->  WindowAgg  (cost=4405.62..4456.42 rows=2904 width=64) (actual time=11.160..11.312 rows=2246 loops=1)                                                                                     │
+│                           Buffers: shared hit=21452                                                                                                                                                              │
+│                           ->  Sort  (cost=4405.60..4412.86 rows=2904 width=60) (actual time=11.034..11.090 rows=2246 loops=1)                                                                                    │
+│                                 Sort Key: customer_rfm.frequency                                                                                                                                                 │
+│                                 Sort Method: quicksort  Memory: 220kB                                                                                                                                            │
+│                                 Buffers: shared hit=21452                                                                                                                                                        │
+│                                 ->  WindowAgg  (cost=4187.76..4238.56 rows=2904 width=60) (actual time=10.729..10.870 rows=2246 loops=1)                                                                         │
+│                                       Buffers: shared hit=21452                                                                                                                                                  │
+│                                       ->  Sort  (cost=4187.74..4195.00 rows=2904 width=56) (actual time=10.603..10.661 rows=2246 loops=1)                                                                        │
+│                                             Sort Key: customer_rfm.monetary                                                                                                                                      │
+│                                             Sort Method: quicksort  Memory: 202kB                                                                                                                                │
+│                                             Buffers: shared hit=21452                                                                                                                                            │
+│                                             ->  Subquery Scan on customer_rfm  (cost=1.81..4020.71 rows=2904 width=56) (actual time=0.100..10.247 rows=2246 loops=1)                                             │
+│                                                   Buffers: shared hit=21452                                                                                                                                      │
+│                                                   ->  GroupAggregate  (cost=1.81..4020.71 rows=2904 width=56) (actual time=0.100..10.117 rows=2246 loops=1)                                                      │
+│                                                         Group Key: o.customer_id                                                                                                                                 │
+│                                                         Buffers: shared hit=21452                                                                                                                                │
+│                                                         ->  Incremental Sort  (cost=1.81..3838.95 rows=14546 width=30) (actual time=0.054..8.343 rows=14522 loops=1)                                             │
+│                                                               Sort Key: o.customer_id, o.order_id                                                                                                                │
+│                                                               Presorted Key: o.customer_id                                                                                                                       │
+│                                                               Full-sort Groups: 391  Sort Method: quicksort  Average Memory: 28kB  Peak Memory: 28kB                                                             │
+│                                                               Pre-sorted Groups: 17  Sort Method: quicksort  Average Memory: 28kB  Peak Memory: 28kB                                                             │
+│                                                               Buffers: shared hit=21452                                                                                                                          │
+│                                                               ->  Nested Loop  (cost=0.57..3429.98 rows=14546 width=30) (actual time=0.011..6.293 rows=14522 loops=1)                                            │
+│                                                                     Buffers: shared hit=21452                                                                                                                    │
+│                                                                     ->  Index Scan using idx_orders_customer_ts on orders o  (cost=0.28..575.66 rows=5336 width=24) (actual time=0.009..1.269 rows=5336 loops=1) │
+│                                                                           Filter: (order_status = ANY ('{paid,shipped,delivered}'::text[]))                                                                      │
+│                                                                           Rows Removed by Filter: 1524                                                                                                           │
+│                                                                           Buffers: shared hit=5355                                                                                                               │
+│                                                                     ->  Index Scan using idx_order_items_order on order_items oi  (cost=0.29..0.50 rows=3 width=14) (actual time=0.000..0.001 rows=3 loops=5336) │
+│                                                                           Index Cond: (order_id = o.order_id)                                                                                                    │
+│                                                                           Buffers: shared hit=16097                                                                                                              │
+│ Planning Time: 0.092 ms                                                                                                                                                                                          │
+│ Execution Time: 14.030 ms                                                                                                                                                                                        │
+└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+(46개 행)
+
+작업시간: 14.246 ms
+RESET
+작업시간: 0.022 ms

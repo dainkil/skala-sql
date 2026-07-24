@@ -1,0 +1,43 @@
+화면단위 보기 기능 끔(전체 자료 모두 보여줌).
+html 테이블의 테두리를 2로 지정했습니다.
+Null 값은 "[NULL]" 문자로 보여짐.
+선 모양: unicode.
+작업수행시간 보임
+SET
+작업시간: 0.122 ms
+┌─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                                                       QUERY PLAN                                                                        │
+├─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ Sort  (cost=520.17..528.44 rows=3308 width=80) (actual time=1.963..1.977 rows=6 loops=1)                                                                │
+│   Sort Key: (date_trunc('month'::text, orders.order_ts))                                                                                                │
+│   Sort Method: quicksort  Memory: 25kB                                                                                                                  │
+│   Buffers: shared hit=21                                                                                                                                │
+│   ->  Hash Join  (cost=196.16..326.79 rows=3308 width=80) (actual time=1.894..1.946 rows=6 loops=1)                                                     │
+│         Hash Cond: ((date_trunc('month'::text, orders.order_ts)) = r.month)                                                                             │
+│         Buffers: shared hit=18                                                                                                                          │
+│         ->  HashAggregate  (cost=188.34..255.04 rows=5336 width=16) (actual time=1.806..1.852 rows=6 loops=1)                                           │
+│               Group Key: date_trunc('month'::text, orders.order_ts)                                                                                     │
+│               Batches: 1  Memory Usage: 217kB                                                                                                           │
+│               Buffers: shared hit=17                                                                                                                    │
+│               ->  Index Only Scan using idx_orders_rev_ts on orders  (cost=0.28..161.66 rows=5336 width=8) (actual time=0.039..1.166 rows=5336 loops=1) │
+│                     Heap Fetches: 0                                                                                                                     │
+│                     Buffers: shared hit=17                                                                                                              │
+│         ->  Hash  (cost=6.27..6.27 rows=124 width=40) (actual time=0.073..0.074 rows=6 loops=1)                                                         │
+│               Buckets: 1024  Batches: 1  Memory Usage: 9kB                                                                                              │
+│               Buffers: shared hit=1                                                                                                                     │
+│               ->  Subquery Scan on r  (cost=3.17..6.27 rows=124 width=40) (actual time=0.066..0.070 rows=6 loops=1)                                     │
+│                     Buffers: shared hit=1                                                                                                               │
+│                     ->  HashAggregate  (cost=3.17..5.03 rows=124 width=40) (actual time=0.066..0.068 rows=6 loops=1)                                    │
+│                           Group Key: date_trunc('month'::text, mv_daily_gmv.day)                                                                        │
+│                           Batches: 1  Memory Usage: 40kB                                                                                                │
+│                           Buffers: shared hit=1                                                                                                         │
+│                           ->  Seq Scan on mv_daily_gmv  (cost=0.00..2.55 rows=124 width=16) (actual time=0.015..0.040 rows=124 loops=1)                 │
+│                                 Buffers: shared hit=1                                                                                                   │
+│ Planning:                                                                                                                                               │
+│   Buffers: shared hit=462                                                                                                                               │
+│ Planning Time: 1.254 ms                                                                                                                                 │
+│ Execution Time: 2.066 ms                                                                                                                                │
+└─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+(29개 행)
+
+작업시간: 4.983 ms

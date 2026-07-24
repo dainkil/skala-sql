@@ -1,0 +1,89 @@
+화면단위 보기 기능 끔(전체 자료 모두 보여줌).
+html 테이블의 테두리를 2로 지정했습니다.
+Null 값은 "[NULL]" 문자로 보여짐.
+선 모양: unicode.
+작업수행시간 보임
+SET
+작업시간: 0.113 ms
+################ [1] 기본 (플래너 자동 선택) ################
+┌───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                                              QUERY PLAN                                                               │
+├───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ Aggregate  (cost=660.73..660.74 rows=1 width=32) (actual time=10.623..10.627 rows=1 loops=1)                                          │
+│   Buffers: shared hit=252                                                                                                             │
+│   ->  Hash Join  (cost=234.14..651.26 rows=3786 width=6) (actual time=3.018..10.226 rows=3908 loops=1)                                │
+│         Hash Cond: (oi.order_id = o.order_id)                                                                                         │
+│         Buffers: shared hit=252                                                                                                       │
+│         ->  Seq Scan on order_items oi  (cost=0.00..368.00 rows=18700 width=14) (actual time=0.006..4.686 rows=18700 loops=1)         │
+│               Buffers: shared hit=181                                                                                                 │
+│         ->  Hash  (cost=216.77..216.77 rows=1389 width=8) (actual time=2.975..2.976 rows=1423 loops=1)                                │
+│               Buckets: 2048  Batches: 1  Memory Usage: 72kB                                                                           │
+│               Buffers: shared hit=71                                                                                                  │
+│               ->  Seq Scan on orders o  (cost=0.00..216.77 rows=1389 width=8) (actual time=0.026..2.739 rows=1423 loops=1)            │
+│                     Filter: ((order_status = ANY ('{paid,shipped,delivered}'::text[])) AND (order_ts >= (now() - '1 mon'::interval))) │
+│                     Rows Removed by Filter: 5437                                                                                      │
+│                     Buffers: shared hit=71                                                                                            │
+│ Planning:                                                                                                                             │
+│   Buffers: shared hit=355                                                                                                             │
+│ Planning Time: 2.223 ms                                                                                                               │
+│ Execution Time: 10.685 ms                                                                                                             │
+└───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+(18개 행)
+
+작업시간: 13.757 ms
+
+################ [2] Hash Join OFF ################
+SET
+작업시간: 0.058 ms
+┌─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                                                         QUERY PLAN                                                                          │
+├─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ Aggregate  (cost=1011.09..1011.10 rows=1 width=32) (actual time=6.301..6.302 rows=1 loops=1)                                                                │
+│   Buffers: shared hit=290                                                                                                                                   │
+│   ->  Merge Join  (cost=289.57..1001.62 rows=3786 width=6) (actual time=2.363..5.996 rows=3908 loops=1)                                                     │
+│         Merge Cond: (oi.order_id = o.order_id)                                                                                                              │
+│         Buffers: shared hit=290                                                                                                                             │
+│         ->  Index Scan using idx_order_items_order on order_items oi  (cost=0.29..620.79 rows=18700 width=14) (actual time=0.009..1.995 rows=18690 loops=1) │
+│               Buffers: shared hit=219                                                                                                                       │
+│         ->  Sort  (cost=289.28..292.75 rows=1389 width=8) (actual time=2.345..2.406 rows=1423 loops=1)                                                      │
+│               Sort Key: o.order_id                                                                                                                          │
+│               Sort Method: quicksort  Memory: 49kB                                                                                                          │
+│               Buffers: shared hit=71                                                                                                                        │
+│               ->  Seq Scan on orders o  (cost=0.00..216.77 rows=1389 width=8) (actual time=0.014..2.254 rows=1423 loops=1)                                  │
+│                     Filter: ((order_status = ANY ('{paid,shipped,delivered}'::text[])) AND (order_ts >= (now() - '1 mon'::interval)))                       │
+│                     Rows Removed by Filter: 5437                                                                                                            │
+│                     Buffers: shared hit=71                                                                                                                  │
+│ Planning:                                                                                                                                                   │
+│   Buffers: shared hit=12                                                                                                                                    │
+│ Planning Time: 0.221 ms                                                                                                                                     │
+│ Execution Time: 6.351 ms                                                                                                                                    │
+└─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+(19개 행)
+
+작업시간: 6.788 ms
+
+################ [3] Hash+Merge OFF (Nested Loop 강제) ################
+SET
+작업시간: 0.034 ms
+┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                                                      QUERY PLAN                                                                      │
+├──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ Aggregate  (cost=1620.17..1620.18 rows=1 width=32) (actual time=4.210..4.211 rows=1 loops=1)                                                         │
+│   Buffers: shared hit=4363                                                                                                                           │
+│   ->  Nested Loop  (cost=0.29..1610.70 rows=3786 width=6) (actual time=0.011..3.899 rows=3908 loops=1)                                               │
+│         Buffers: shared hit=4363                                                                                                                     │
+│         ->  Seq Scan on orders o  (cost=0.00..216.77 rows=1389 width=8) (actual time=0.006..1.669 rows=1423 loops=1)                                 │
+│               Filter: ((order_status = ANY ('{paid,shipped,delivered}'::text[])) AND (order_ts >= (now() - '1 mon'::interval)))                      │
+│               Rows Removed by Filter: 5437                                                                                                           │
+│               Buffers: shared hit=71                                                                                                                 │
+│         ->  Index Scan using idx_order_items_order on order_items oi  (cost=0.29..0.97 rows=3 width=14) (actual time=0.001..0.001 rows=3 loops=1423) │
+│               Index Cond: (order_id = o.order_id)                                                                                                    │
+│               Buffers: shared hit=4292                                                                                                               │
+│ Planning Time: 0.080 ms                                                                                                                              │
+│ Execution Time: 4.222 ms                                                                                                                             │
+└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+(13개 행)
+
+작업시간: 4.431 ms
+RESET
+작업시간: 0.054 ms

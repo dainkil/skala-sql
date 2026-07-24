@@ -1,0 +1,85 @@
+======================================================================
+ Q10 JOIN 전략 비교 — 병목이던 customer_total: order_items(18,700) ⋈ orders → 2,246 고객 집계
+   (튜닝 후에는 이 조인을 mv_customer_rev 읽기로 대체 → 조인 자체가 사라짐)
+   요약(2회차, 조인 노드 기준):
+     HJ(선택)  join cost 649   Buffers 252     ~8.9ms   ← cost 최소
+     NLJ       join cost 3019  Buffers 16168   ~8.6ms   ← idx_order_items_order 룩업 5,336 loops, Buffers 62배
+     SMJ       join cost 1113  Buffers 310     ~6.9ms   ← 양측 인덱스 스캔 병합, wall 빠르나 cost는 HJ↑
+======================================================================
+
+########## HJ ##########
+                                                          QUERY PLAN                                                           
+-------------------------------------------------------------------------------------------------------------------------------
+ HashAggregate  (cost=721.88..758.18 rows=2904 width=40) (actual time=6.999..7.348 rows=2246 loops=1)
+   Group Key: o.customer_id
+   Batches: 1  Memory Usage: 1137kB
+   Buffers: shared hit=252
+   ->  Hash Join  (cost=232.03..649.15 rows=14546 width=14) (actual time=0.886..4.682 rows=14522 loops=1)
+         Hash Cond: (oi.order_id = o.order_id)
+         Buffers: shared hit=252
+         ->  Seq Scan on order_items oi  (cost=0.00..368.00 rows=18700 width=14) (actual time=0.001..1.027 rows=18700 loops=1)
+               Buffers: shared hit=181
+         ->  Hash  (cost=165.32..165.32 rows=5336 width=16) (actual time=0.878..0.878 rows=5336 loops=1)
+               Buckets: 8192  Batches: 1  Memory Usage: 315kB
+               Buffers: shared hit=71
+               ->  Seq Scan on orders o  (cost=0.00..165.32 rows=5336 width=16) (actual time=0.003..0.598 rows=5336 loops=1)
+                     Filter: (order_status = ANY ('{paid,shipped,delivered}'::text[]))
+                     Rows Removed by Filter: 1524
+                     Buffers: shared hit=71
+ Planning:
+   Buffers: shared hit=291
+ Planning Time: 0.478 ms
+ Execution Time: 7.485 ms
+(20개 행)
+
+
+########## NLJ ##########
+SET
+SET
+                                                                      QUERY PLAN                                                                      
+------------------------------------------------------------------------------------------------------------------------------------------------------
+ HashAggregate  (cost=3092.37..3128.67 rows=2904 width=40) (actual time=8.899..9.221 rows=2246 loops=1)
+   Group Key: o.customer_id
+   Batches: 1  Memory Usage: 1137kB
+   Buffers: shared hit=16168
+   ->  Nested Loop  (cost=0.29..3019.64 rows=14546 width=14) (actual time=0.008..6.882 rows=14522 loops=1)
+         Buffers: shared hit=16168
+         ->  Seq Scan on orders o  (cost=0.00..165.32 rows=5336 width=16) (actual time=0.003..0.791 rows=5336 loops=1)
+               Filter: (order_status = ANY ('{paid,shipped,delivered}'::text[]))
+               Rows Removed by Filter: 1524
+               Buffers: shared hit=71
+         ->  Index Scan using idx_order_items_order on order_items oi  (cost=0.29..0.50 rows=3 width=14) (actual time=0.001..0.001 rows=3 loops=5336)
+               Index Cond: (order_id = o.order_id)
+               Buffers: shared hit=16097
+ Planning:
+   Buffers: shared hit=267
+ Planning Time: 0.379 ms
+ Execution Time: 9.358 ms
+(17개 행)
+
+
+########## SMJ ##########
+SET
+SET
+                                                                         QUERY PLAN                                                                          
+-------------------------------------------------------------------------------------------------------------------------------------------------------------
+ HashAggregate  (cost=1185.97..1222.27 rows=2904 width=40) (actual time=7.384..7.667 rows=2246 loops=1)
+   Group Key: o.customer_id
+   Batches: 1  Memory Usage: 1137kB
+   Buffers: shared hit=310
+   ->  Merge Join  (cost=0.57..1113.24 rows=14546 width=14) (actual time=0.010..5.280 rows=14522 loops=1)
+         Merge Cond: (o.order_id = oi.order_id)
+         Buffers: shared hit=310
+         ->  Index Scan using orders_pkey on orders o  (cost=0.28..286.91 rows=5336 width=16) (actual time=0.004..1.168 rows=5336 loops=1)
+               Filter: (order_status = ANY ('{paid,shipped,delivered}'::text[]))
+               Rows Removed by Filter: 1524
+               Buffers: shared hit=91
+         ->  Index Scan using idx_order_items_order on order_items oi  (cost=0.29..620.79 rows=18700 width=14) (actual time=0.003..1.789 rows=18700 loops=1)
+               Buffers: shared hit=219
+ Planning:
+   Buffers: shared hit=291
+ Planning Time: 0.455 ms
+ Execution Time: 7.789 ms
+(17개 행)
+
+

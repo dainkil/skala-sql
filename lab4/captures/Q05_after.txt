@@ -1,0 +1,44 @@
+화면단위 보기 기능 끔(전체 자료 모두 보여줌).
+html 테이블의 테두리를 2로 지정했습니다.
+Null 값은 "[NULL]" 문자로 보여짐.
+선 모양: unicode.
+작업수행시간 보임
+SET
+작업시간: 0.082 ms
+┌─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                                                           QUERY PLAN                                                                            │
+├─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ Sort  (cost=734.24..739.86 rows=2246 width=68) (actual time=5.328..5.405 rows=2246 loops=1)                                                                     │
+│   Sort Key: scored.r_score DESC, scored.f_score DESC, scored.m_score DESC, scored.monetary DESC                                                                 │
+│   Sort Method: quicksort  Memory: 237kB                                                                                                                         │
+│   Buffers: shared hit=44                                                                                                                                        │
+│   ->  Subquery Scan on scored  (cost=508.16..609.22 rows=2246 width=68) (actual time=2.406..3.115 rows=2246 loops=1)                                            │
+│         Buffers: shared hit=38                                                                                                                                  │
+│         ->  WindowAgg  (cost=508.16..564.30 rows=2246 width=72) (actual time=2.405..2.882 rows=2246 loops=1)                                                    │
+│               Buffers: shared hit=38                                                                                                                            │
+│               ->  Sort  (cost=508.15..513.76 rows=2246 width=64) (actual time=2.233..2.308 rows=2246 loops=1)                                                   │
+│                     Sort Key: mv_customer_rev.last_order_ts                                                                                                     │
+│                     Sort Method: quicksort  Memory: 220kB                                                                                                       │
+│                     Buffers: shared hit=38                                                                                                                      │
+│                     ->  WindowAgg  (cost=343.83..383.12 rows=2246 width=64) (actual time=1.579..1.825 rows=2246 loops=1)                                        │
+│                           Buffers: shared hit=35                                                                                                                │
+│                           ->  Sort  (cost=343.82..349.43 rows=2246 width=60) (actual time=1.419..1.491 rows=2246 loops=1)                                       │
+│                                 Sort Key: mv_customer_rev.frequency                                                                                             │
+│                                 Sort Method: quicksort  Memory: 220kB                                                                                           │
+│                                 Buffers: shared hit=35                                                                                                          │
+│                                 ->  WindowAgg  (cost=179.50..218.79 rows=2246 width=60) (actual time=0.920..1.153 rows=2246 loops=1)                            │
+│                                       Buffers: shared hit=32                                                                                                    │
+│                                       ->  Sort  (cost=179.49..185.10 rows=2246 width=56) (actual time=0.728..0.800 rows=2246 loops=1)                           │
+│                                             Sort Key: mv_customer_rev.monetary                                                                                  │
+│                                             Sort Method: quicksort  Memory: 202kB                                                                               │
+│                                             Buffers: shared hit=32                                                                                              │
+│                                             ->  Seq Scan on mv_customer_rev  (cost=0.00..54.46 rows=2246 width=56) (actual time=0.006..0.251 rows=2246 loops=1) │
+│                                                   Buffers: shared hit=32                                                                                        │
+│ Planning:                                                                                                                                                       │
+│   Buffers: shared hit=102                                                                                                                                       │
+│ Planning Time: 0.302 ms                                                                                                                                         │
+│ Execution Time: 5.541 ms                                                                                                                                        │
+└─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+(30개 행)
+
+작업시간: 6.650 ms

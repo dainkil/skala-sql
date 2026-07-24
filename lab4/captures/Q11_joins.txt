@@ -1,0 +1,47 @@
+======================================================================
+ Q11 JOIN 전략 비교 — products(600) LEFT JOIN prod_rev(121, reviews 집계)
+   규모가 작아(600×121) 세 방식 모두 sub-0.15ms, 플래너는 HJ 기본. 강제 전환 무의미.
+     HJ ~0.11ms / NLJ ~0.10ms / SMJ ~0.14ms (Buffers 108 동일권)
+   Q11 의 실질 튜닝 포인트는 조인이 아니라 '안전함수 선택'(위 after 참고).
+======================================================================
+
+########## HJ ##########
+                                               QUERY PLAN                                                
+---------------------------------------------------------------------------------------------------------
+ Seq Scan on products p  (cost=0.00..13.00 rows=600 width=8) (actual time=0.007..0.092 rows=600 loops=1)
+   Buffers: shared hit=7
+ Planning:
+   Buffers: shared hit=108
+ Planning Time: 0.628 ms
+ Execution Time: 0.151 ms
+(6개 행)
+
+
+########## NLJ ##########
+SET
+SET
+                                               QUERY PLAN                                                
+---------------------------------------------------------------------------------------------------------
+ Seq Scan on products p  (cost=0.00..13.00 rows=600 width=8) (actual time=0.009..0.130 rows=600 loops=1)
+   Buffers: shared hit=7
+ Planning:
+   Buffers: shared hit=108
+ Planning Time: 0.794 ms
+ Execution Time: 0.211 ms
+(6개 행)
+
+
+########## SMJ ##########
+SET
+SET
+                                               QUERY PLAN                                                
+---------------------------------------------------------------------------------------------------------
+ Seq Scan on products p  (cost=0.00..13.00 rows=600 width=8) (actual time=0.006..0.106 rows=600 loops=1)
+   Buffers: shared hit=7
+ Planning:
+   Buffers: shared hit=108
+ Planning Time: 0.555 ms
+ Execution Time: 0.160 ms
+(6개 행)
+
+

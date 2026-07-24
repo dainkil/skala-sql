@@ -1,0 +1,40 @@
+-- Q11 BEFORE : 두 안전함수(f_safe_div plpgsql + safe_div sql)를 나란히 계산. reviews 집계→products LEFT JOIN→Sort 600. Execution ~3.85~4.10ms.
+-- 대조: 순수 COALESCE(rs,0)/COALESCE(rc,0) 는 리뷰 0건(479개)에서 0/0 → 'division by zero' 에러(안전함수가 이를 막음).
+화면단위 보기 기능 끔(전체 자료 모두 보여줌).
+html 테이블의 테두리를 2로 지정했습니다.
+Null 값은 "[NULL]" 문자로 보여짐.
+선 모양: unicode.
+작업수행시간 보임
+SET
+작업시간: 0.120 ms
+┌───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                                              QUERY PLAN                                                               │
+├───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ Sort  (cost=267.75..269.25 rows=600 width=91) (actual time=2.107..2.151 rows=600 loops=1)                                             │
+│   Sort Key: (COALESCE(pr.review_count, '0'::bigint)), p.product_id                                                                    │
+│   Sort Method: quicksort  Memory: 58kB                                                                                                │
+│   Buffers: shared hit=31                                                                                                              │
+│   ->  Hash Left Join  (cost=60.48..240.06 rows=600 width=91) (actual time=0.916..1.766 rows=600 loops=1)                              │
+│         Hash Cond: (p.product_id = pr.product_id)                                                                                     │
+│         Buffers: shared hit=28                                                                                                        │
+│         ->  Seq Scan on products p  (cost=0.00..13.00 rows=600 width=19) (actual time=0.008..0.095 rows=600 loops=1)                  │
+│               Buffers: shared hit=7                                                                                                   │
+│         ->  Hash  (cost=58.96..58.96 rows=121 width=24) (actual time=0.768..0.769 rows=121 loops=1)                                   │
+│               Buckets: 1024  Batches: 1  Memory Usage: 15kB                                                                           │
+│               Buffers: shared hit=21                                                                                                  │
+│               ->  Subquery Scan on pr  (cost=56.54..58.96 rows=121 width=24) (actual time=0.703..0.738 rows=121 loops=1)              │
+│                     Buffers: shared hit=21                                                                                            │
+│                     ->  HashAggregate  (cost=56.54..57.75 rows=121 width=24) (actual time=0.702..0.724 rows=121 loops=1)              │
+│                           Group Key: reviews.product_id                                                                               │
+│                           Batches: 1  Memory Usage: 48kB                                                                              │
+│                           Buffers: shared hit=21                                                                                      │
+│                           ->  Seq Scan on reviews  (cost=0.00..41.31 rows=2031 width=12) (actual time=0.005..0.233 rows=2031 loops=1) │
+│                                 Buffers: shared hit=21                                                                                │
+│ Planning:                                                                                                                             │
+│   Buffers: shared hit=420                                                                                                             │
+│ Planning Time: 1.534 ms                                                                                                               │
+│ Execution Time: 4.268 ms                                                                                                              │
+└───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+(24개 행)
+
+작업시간: 7.021 ms

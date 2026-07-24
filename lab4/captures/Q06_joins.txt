@@ -1,0 +1,122 @@
+======================================================================
+ Q06 JOIN 전략 비교 — before self-join (order_items 없음, orders×orders)
+   대상 조인: repurchase CTE 의 (first_order f ⋈ orders o2) on customer_id
+   30일 window(order_ts) 는 인덱스 조건이 아니라 Join Filter 로 처리됨.
+
+   요약(2회차):
+     HJ(선택)  cost 442   Buffers 142    6.79ms   ← 플래너 선택, cost·buffers 최소
+     NLJ       cost 1607  Buffers 5919   5.99ms   ← idx_orders_customer_ts 룩업 2246 loops
+                                                     캐시선 빠르나 Buffers 41배 폭발(위험)
+     SMJ       cost 1019  Buffers 142    6.00ms   ← 양측 Sort 필요
+======================================================================
+
+########## HJ (default) ##########
+                                                               QUERY PLAN                                                                
+-----------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate  (cost=442.61..442.62 rows=1 width=8) (actual time=6.533..6.542 rows=1 loops=1)
+   Buffers: shared hit=142
+   ->  HashAggregate  (cost=438.11..440.11 rows=200 width=8) (actual time=6.363..6.481 rows=1121 loops=1)
+         Group Key: o.customer_id
+         Batches: 1  Memory Usage: 145kB
+         Buffers: shared hit=142
+         ->  Hash Join  (cost=257.34..436.68 rows=574 width=8) (actual time=3.169..6.045 rows=1361 loops=1)
+               Hash Cond: (o2.customer_id = o.customer_id)
+               Join Filter: ((o2.order_ts > (min(o.order_ts))) AND (o2.order_ts <= ((min(o.order_ts)) + '30 days'::interval)))
+               Rows Removed by Join Filter: 3975
+               Buffers: shared hit=142
+               ->  Seq Scan on orders o2  (cost=0.00..165.32 rows=5336 width=16) (actual time=0.009..1.170 rows=5336 loops=1)
+                     Filter: (order_status = ANY ('{paid,shipped,delivered}'::text[]))
+                     Rows Removed by Filter: 1524
+                     Buffers: shared hit=71
+               ->  Hash  (cost=221.04..221.04 rows=2904 width=16) (actual time=3.135..3.136 rows=2246 loops=1)
+                     Buckets: 4096  Batches: 1  Memory Usage: 138kB
+                     Buffers: shared hit=71
+                     ->  HashAggregate  (cost=192.00..221.04 rows=2904 width=16) (actual time=2.570..2.859 rows=2246 loops=1)
+                           Group Key: o.customer_id
+                           Batches: 1  Memory Usage: 369kB
+                           Buffers: shared hit=71
+                           ->  Seq Scan on orders o  (cost=0.00..165.32 rows=5336 width=16) (actual time=0.002..1.432 rows=5336 loops=1)
+                                 Filter: (order_status = ANY ('{paid,shipped,delivered}'::text[]))
+                                 Rows Removed by Filter: 1524
+                                 Buffers: shared hit=71
+ Planning:
+   Buffers: shared hit=305
+ Planning Time: 1.056 ms
+ Execution Time: 6.635 ms
+(30개 행)
+
+
+########## NLJ (enable_hashjoin=off, enable_mergejoin=off) ##########
+SET
+SET
+                                                                           QUERY PLAN                                                                           
+----------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate  (cost=1607.89..1607.90 rows=1 width=8) (actual time=6.222..6.230 rows=1 loops=1)
+   Buffers: shared hit=5919
+   ->  HashAggregate  (cost=1603.39..1605.39 rows=200 width=8) (actual time=6.094..6.177 rows=1121 loops=1)
+         Group Key: o.customer_id
+         Batches: 1  Memory Usage: 145kB
+         Buffers: shared hit=5919
+         ->  Nested Loop  (cost=192.29..1601.95 rows=574 width=8) (actual time=2.226..5.823 rows=1361 loops=1)
+               Buffers: shared hit=5919
+               ->  HashAggregate  (cost=192.00..221.04 rows=2904 width=16) (actual time=2.200..2.486 rows=2246 loops=1)
+                     Group Key: o.customer_id
+                     Batches: 1  Memory Usage: 369kB
+                     Buffers: shared hit=71
+                     ->  Seq Scan on orders o  (cost=0.00..165.32 rows=5336 width=16) (actual time=0.009..1.209 rows=5336 loops=1)
+                           Filter: (order_status = ANY ('{paid,shipped,delivered}'::text[]))
+                           Rows Removed by Filter: 1524
+                           Buffers: shared hit=71
+               ->  Index Scan using idx_orders_customer_ts on orders o2  (cost=0.29..0.47 rows=1 width=16) (actual time=0.001..0.001 rows=1 loops=2246)
+                     Index Cond: ((customer_id = o.customer_id) AND (order_ts > (min(o.order_ts))) AND (order_ts <= ((min(o.order_ts)) + '30 days'::interval)))
+                     Filter: (order_status = ANY ('{paid,shipped,delivered}'::text[]))
+                     Rows Removed by Filter: 0
+                     Buffers: shared hit=5848
+ Planning:
+   Buffers: shared hit=302
+ Planning Time: 1.129 ms
+ Execution Time: 6.321 ms
+(25개 행)
+
+
+########## SMJ (enable_hashjoin=off) ##########
+SET
+                                                               QUERY PLAN                                                                
+-----------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate  (cost=1019.27..1019.28 rows=1 width=8) (actual time=9.117..9.119 rows=1 loops=1)
+   Buffers: shared hit=142
+   ->  Unique  (cost=883.75..1016.77 rows=200 width=8) (actual time=8.088..9.085 rows=1121 loops=1)
+         Buffers: shared hit=142
+         ->  Merge Join  (cost=883.75..1015.33 rows=574 width=8) (actual time=8.087..9.000 rows=1361 loops=1)
+               Merge Cond: (o.customer_id = o2.customer_id)
+               Join Filter: ((o2.order_ts > (min(o.order_ts))) AND (o2.order_ts <= ((min(o.order_ts)) + '30 days'::interval)))
+               Rows Removed by Join Filter: 3975
+               Buffers: shared hit=142
+               ->  Sort  (cost=388.08..395.34 rows=2904 width=16) (actual time=6.623..6.677 rows=2246 loops=1)
+                     Sort Key: o.customer_id
+                     Sort Method: quicksort  Memory: 167kB
+                     Buffers: shared hit=71
+                     ->  HashAggregate  (cost=192.00..221.04 rows=2904 width=16) (actual time=5.965..6.233 rows=2246 loops=1)
+                           Group Key: o.customer_id
+                           Batches: 1  Memory Usage: 369kB
+                           Buffers: shared hit=71
+                           ->  Seq Scan on orders o  (cost=0.00..165.32 rows=5336 width=16) (actual time=0.007..1.016 rows=5336 loops=1)
+                                 Filter: (order_status = ANY ('{paid,shipped,delivered}'::text[]))
+                                 Rows Removed by Filter: 1524
+                                 Buffers: shared hit=71
+               ->  Sort  (cost=495.66..509.00 rows=5336 width=16) (actual time=1.456..1.584 rows=5336 loops=1)
+                     Sort Key: o2.customer_id
+                     Sort Method: quicksort  Memory: 359kB
+                     Buffers: shared hit=71
+                     ->  Seq Scan on orders o2  (cost=0.00..165.32 rows=5336 width=16) (actual time=0.008..0.912 rows=5336 loops=1)
+                           Filter: (order_status = ANY ('{paid,shipped,delivered}'::text[]))
+                           Rows Removed by Filter: 1524
+                           Buffers: shared hit=71
+ Planning:
+   Buffers: shared hit=305
+ Planning Time: 0.845 ms
+ Execution Time: 9.187 ms
+(33개 행)
+
+
+-- 세션 스위치는 psql -c 단위라 자동 원복(RESET 불필요). 결론: 강제 전환 없음, HJ 유지.

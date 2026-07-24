@@ -1,0 +1,75 @@
+======================================================================
+ Q07 JOIN 전략 비교 — inventory(600) ⋈ products(600) on product_id
+   요약(2회차):
+     HJ(선택)  cost 29.6  Buffers 12    0.388ms  ← cost 최소, 플래너 선택
+     NLJ       cost 115   Buffers 185   0.216ms  ← products_pkey 룩업 60 loops; 캐시 wall 최소지만 Buffers 15배
+     SMJ       cost 59.9  Buffers 14    0.332ms  ← inventory Sort 필요
+   → 소규모라 실측 wall 은 NLJ가 빠르나 cost·buffers 로는 HJ가 안전. 강제 전환 없음.
+======================================================================
+
+########## HJ (default) ##########
+                                                     QUERY PLAN                                                      
+---------------------------------------------------------------------------------------------------------------------
+ Hash Join  (cost=15.00..29.59 rows=200 width=19) (actual time=0.108..0.234 rows=60 loops=1)
+   Hash Cond: (p.product_id = i.product_id)
+   Buffers: shared hit=12
+   ->  Seq Scan on products p  (cost=0.00..13.00 rows=600 width=19) (actual time=0.011..0.067 rows=600 loops=1)
+         Buffers: shared hit=7
+   ->  Hash  (cost=12.50..12.50 rows=200 width=8) (actual time=0.088..0.088 rows=60 loops=1)
+         Buckets: 1024  Batches: 1  Memory Usage: 11kB
+         Buffers: shared hit=5
+         ->  Seq Scan on inventory i  (cost=0.00..12.50 rows=200 width=8) (actual time=0.010..0.072 rows=60 loops=1)
+               Filter: (qty_on_hand < reorder_point)
+               Rows Removed by Filter: 540
+               Buffers: shared hit=5
+ Planning:
+   Buffers: shared hit=269
+ Planning Time: 1.097 ms
+ Execution Time: 0.285 ms
+(16개 행)
+
+
+########## NLJ (enable_hashjoin=off, enable_mergejoin=off) ##########
+SET
+SET
+                                                            QUERY PLAN                                                            
+----------------------------------------------------------------------------------------------------------------------------------
+ Nested Loop  (cost=0.28..115.00 rows=200 width=19) (actual time=0.025..0.211 rows=60 loops=1)
+   Buffers: shared hit=185
+   ->  Seq Scan on inventory i  (cost=0.00..12.50 rows=200 width=8) (actual time=0.014..0.081 rows=60 loops=1)
+         Filter: (qty_on_hand < reorder_point)
+         Rows Removed by Filter: 540
+         Buffers: shared hit=5
+   ->  Index Scan using products_pkey on products p  (cost=0.28..0.51 rows=1 width=19) (actual time=0.002..0.002 rows=1 loops=60)
+         Index Cond: (product_id = i.product_id)
+         Buffers: shared hit=180
+ Planning:
+   Buffers: shared hit=239
+ Planning Time: 1.237 ms
+ Execution Time: 0.269 ms
+(13개 행)
+
+
+########## SMJ (enable_hashjoin=off) ##########
+SET
+                                                              QUERY PLAN                                                              
+--------------------------------------------------------------------------------------------------------------------------------------
+ Merge Join  (cost=20.42..59.92 rows=200 width=19) (actual time=0.112..0.280 rows=60 loops=1)
+   Merge Cond: (p.product_id = i.product_id)
+   Buffers: shared hit=14
+   ->  Index Scan using products_pkey on products p  (cost=0.28..35.27 rows=600 width=19) (actual time=0.008..0.097 rows=574 loops=1)
+         Buffers: shared hit=9
+   ->  Sort  (cost=20.14..20.64 rows=200 width=8) (actual time=0.099..0.103 rows=60 loops=1)
+         Sort Key: i.product_id
+         Sort Method: quicksort  Memory: 25kB
+         Buffers: shared hit=5
+         ->  Seq Scan on inventory i  (cost=0.00..12.50 rows=200 width=8) (actual time=0.013..0.079 rows=60 loops=1)
+               Filter: (qty_on_hand < reorder_point)
+               Rows Removed by Filter: 540
+               Buffers: shared hit=5
+ Planning:
+   Buffers: shared hit=269
+ Planning Time: 1.014 ms
+ Execution Time: 0.334 ms
+(17개 행)
+

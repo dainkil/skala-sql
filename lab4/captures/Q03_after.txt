@@ -1,0 +1,58 @@
+화면단위 보기 기능 끔(전체 자료 모두 보여줌).
+html 테이블의 테두리를 2로 지정했습니다.
+Null 값은 "[NULL]" 문자로 보여짐.
+선 모양: unicode.
+작업수행시간 보임
+SET
+작업시간: 0.090 ms
+┌───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                                                              QUERY PLAN                                                                               │
+├───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ Limit  (cost=125.81..125.84 rows=10 width=104) (actual time=1.005..1.010 rows=10 loops=1)                                                                             │
+│   Buffers: shared hit=21                                                                                                                                              │
+│   ->  Sort  (cost=125.81..128.06 rows=897 width=104) (actual time=1.004..1.006 rows=10 loops=1)                                                                       │
+│         Sort Key: (sum(m.revenue)) DESC                                                                                                                               │
+│         Sort Method: quicksort  Memory: 25kB                                                                                                                          │
+│         Buffers: shared hit=21                                                                                                                                        │
+│         ->  HashAggregate  (cost=92.97..106.43 rows=897 width=104) (actual time=0.973..0.980 rows=10 loops=1)                                                         │
+│               Group Key: m.category_id, vp.path                                                                                                                       │
+│               Batches: 1  Memory Usage: 49kB                                                                                                                          │
+│               Buffers: shared hit=18                                                                                                                                  │
+│               ->  Hash Join  (cost=32.25..84.00 rows=897 width=55) (actual time=0.080..0.746 rows=890 loops=1)                                                        │
+│                     Hash Cond: (m.category_id = vp.category_id)                                                                                                       │
+│                     Buffers: shared hit=18                                                                                                                            │
+│                     ->  Seq Scan on mv_category_daily m  (cost=0.00..39.42 rows=897 width=23) (actual time=0.007..0.510 rows=890 loops=1)                             │
+│                           Filter: (day >= (date_trunc('day'::text, now()) - '90 days'::interval))                                                                     │
+│                           Rows Removed by Filter: 281                                                                                                                 │
+│                           Buffers: shared hit=16                                                                                                                      │
+│                     ->  Hash  (cost=30.95..30.95 rows=104 width=40) (actual time=0.059..0.060 rows=14 loops=1)                                                        │
+│                           Buckets: 1024  Batches: 1  Memory Usage: 9kB                                                                                                │
+│                           Buffers: shared hit=2                                                                                                                       │
+│                           ->  Subquery Scan on vp  (cost=27.83..30.95 rows=104 width=40) (actual time=0.007..0.047 rows=14 loops=1)                                   │
+│                                 Buffers: shared hit=2                                                                                                                 │
+│                                 ->  CTE Scan on r  (cost=27.83..29.91 rows=104 width=80) (actual time=0.007..0.045 rows=14 loops=1)                                   │
+│                                       Buffers: shared hit=2                                                                                                           │
+│                                       CTE r                                                                                                                           │
+│                                         ->  Recursive Union  (cost=0.00..27.83 rows=104 width=56) (actual time=0.005..0.039 rows=14 loops=1)                          │
+│                                               Buffers: shared hit=2                                                                                                   │
+│                                               ->  Seq Scan on categories  (cost=0.00..1.14 rows=4 width=32) (actual time=0.004..0.005 rows=4 loops=1)                 │
+│                                                     Filter: (parent_id IS NULL)                                                                                       │
+│                                                     Rows Removed by Filter: 10                                                                                        │
+│                                                     Buffers: shared hit=1                                                                                             │
+│                                               ->  Hash Join  (cost=1.32..2.57 rows=10 width=56) (actual time=0.012..0.014 rows=5 loops=2)                             │
+│                                                     Hash Cond: (r_1.category_id = c.parent_id)                                                                        │
+│                                                     Buffers: shared hit=1                                                                                             │
+│                                                     ->  WorkTable Scan on r r_1  (cost=0.00..0.80 rows=40 width=40) (actual time=0.000..0.001 rows=7 loops=2)         │
+│                                                     ->  Hash  (cost=1.14..1.14 rows=14 width=24) (actual time=0.007..0.007 rows=10 loops=1)                           │
+│                                                           Buckets: 1024  Batches: 1  Memory Usage: 9kB                                                                │
+│                                                           Buffers: shared hit=1                                                                                       │
+│                                                           ->  Seq Scan on categories c  (cost=0.00..1.14 rows=14 width=24) (actual time=0.002..0.002 rows=14 loops=1) │
+│                                                                 Buffers: shared hit=1                                                                                 │
+│ Planning:                                                                                                                                                             │
+│   Buffers: shared hit=223                                                                                                                                             │
+│ Planning Time: 0.891 ms                                                                                                                                               │
+│ Execution Time: 1.108 ms                                                                                                                                              │
+└───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+(44개 행)
+
+작업시간: 3.248 ms
